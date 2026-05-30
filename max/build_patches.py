@@ -29,6 +29,9 @@ p = mp.MaxPatch(verbose=False)
 loadbang = p.place("loadbang", starting_pos=[40, 40])[0]
 start = p.place("message 1", starting_pos=[40, 100])[0]
 metro = p.place("metro 250", starting_pos=[40, 160])[0]
+# live.thisdevice bangs when the Live set is ready (Max for Live only; inert in
+# standalone Max, where loadbang/metro still drive the patch for Test A).
+live_dev = p.place("live.thisdevice", starting_pos=[260, 160])[0]
 js = p.place("js live_api_helpers.js", starting_pos=[40, 240])[0]
 prepend = p.place("prepend /lichtspiel/state", starting_pos=[40, 320])[0]
 udpsend = p.place("udpsend 127.0.0.1 7400", starting_pos=[40, 380])[0]
@@ -46,6 +49,7 @@ def ensure(obj, n_in, n_out):
 ensure(js, 1, 1)
 ensure(prepend, 1, 1)
 ensure(udpsend, 1, 0)
+ensure(live_dev, 0, 1)  # live.thisdevice: 1 outlet (bang on Live-set ready)
 
 
 def out0(o):
@@ -61,6 +65,8 @@ p.connect(
     [out0(start), in0(metro)],      # "1" → start metro
     [out0(loadbang), in0(js)],      # on load → initial read
     [out0(metro), in0(js)],         # heartbeat → re-read
+    [out0(live_dev), in0(js)],      # Live set ready (M4L) → read
+    [out0(live_dev), in0(start)],   # Live set ready (M4L) → start metro
     [out0(js), in0(prepend)],       # JSON state → prepend address
     [out0(prepend), in0(udpsend)],  # OSC message → UDP to bridge
 )
