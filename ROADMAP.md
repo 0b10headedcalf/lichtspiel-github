@@ -57,13 +57,21 @@ Message bus between Max and p5.
 **Acceptance:** CLI changes the p5 scene ✓ · CLI sends a fake `LiveSessionState` ✓ ·
 p5 responds ✓ · reconnect works ✓ (bridge self-test green).
 
-## Phase 3 — Max for Live Live API probe ⬜ (needs Max GUI)
+## Phase 3 — Max for Live Live API probe 🟡 (bridge done; .amxd needs Max GUI)
 
-Read real Live state. **Requires hands-on Max patching — human-in-the-loop.**
+Read real Live state and feed it to p5 over OSC. See `max/docs/max_patch_notes.md`.
 
-- ⬜ `live_api_probe.maxpat`, `LichtspielHub.amxd` shell.
-- ⬜ Read selected track/clip + tempo/transport; emit stable JSON to Node.
-- ⬜ Compact, product-like device UI (status / source / visual / macros).
+- ✅ Bridge **OSC receiver** (`oscRouter.ts`, pure-Node dgram + OSC codec):
+  `/lichtspiel/state|scene|param` on UDP 7400 → hub → p5. Verified end-to-end
+  (`pnpm --filter @lichtspiel/live-bridge test:osc`).
+- ✅ `js/live_api_helpers.js` — reads transport + selected track/scene/clip via
+  `LiveAPI`, emits a `LiveSessionState` JSON symbol (guarded; degrades to default).
+- ✅ Generated probe patch `patches/lichtspiel_probe.maxpat` (`build_patches.py`
+  via MaxPyLang): loadbang/metro → js → prepend → udpsend.
+- 🟡 Assemble + save `devices/LichtspielHub.amxd` in the Max GUI (add
+  `live.thisdevice` + device UI) — **human-in-the-loop**.
+- ⬜ Verify in a real Live set (clip selection updates the bridge log → p5).
+- ⬜ Expose Live params (`live.dial`) → `/lichtspiel/param`; compact device UI.
 
 **Acceptance:** changing the selected clip / toggling transport updates the
 bridge log · device loads without missing deps · M4L manual controls move p5

@@ -21,9 +21,9 @@ const osc = new OscRouter({
   maxToBridgePort: Number(process.env['LICHTSPIEL_OSC_MAX_TO_BRIDGE_PORT'] ?? 7400),
   bridgeToMaxPort: Number(process.env['LICHTSPIEL_OSC_BRIDGE_TO_MAX_PORT'] ?? 7401),
   serialoscPort: Number(process.env['LICHTSPIEL_SERIALOSC_PORT'] ?? 12002),
-  onMessage: () => {
-    /* Phase 3/4: feed decoded OSC into the hub */
-  },
+  prefix: process.env['LICHTSPIEL_OSC_PREFIX'] ?? '/lichtspiel',
+  // OSC from Max is routed into the hub exactly like a WS client message.
+  onMessage: (m) => server.ingest(m),
 });
 osc.start();
 

@@ -83,8 +83,6 @@ export class BridgeServer {
   }
 
   private route(client: Client, m: WireMessage): void {
-    const src = `${client.role}#${client.id}`;
-
     if (isType(m, 'hello')) {
       client.role = m.payload.role;
       logger.info('hello', { source: `${client.role}#${client.id}`, type: 'hello' });
@@ -92,7 +90,15 @@ export class BridgeServer {
       this.emitStatus();
       return;
     }
+    this.routeMessage(m, `${client.role}#${client.id}`);
+  }
 
+  /** Route a wire message from a non-WebSocket source (e.g. OSC from Max). */
+  ingest(m: WireMessage): void {
+    this.routeMessage(m, 'osc');
+  }
+
+  private routeMessage(m: WireMessage, src: string): void {
     if (isType(m, 'live.state')) {
       const v = validate('LiveSessionState', m.payload);
       logger.info('live.state', {
