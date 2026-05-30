@@ -84,6 +84,7 @@ bus.on('params.patch', (patch) => host.setTargetParams(patch));
 
 bus.on('live.state', (state) => {
   host.setLive(state);
+  debug.setLive(state); // visible confirmation of the M4L → bridge → p5 path
   // Phase 5 will route Live state through retrieval to pick a scene.
 });
 

@@ -4,7 +4,7 @@
  * the panel never costs meaningful frame time.
  */
 
-import type { VisualParamVector } from '@lichtspiel/schemas';
+import type { LiveSessionState, VisualParamVector } from '@lichtspiel/schemas';
 import { KEYBOARD_HELP } from '../keyboard.js';
 
 const READOUT_KEYS: Array<keyof VisualParamVector> = [
@@ -27,6 +27,7 @@ export class DebugPanel {
   private templateName = '';
   private locked = false;
   private connected = false;
+  private liveSummary = '';
 
   constructor(root: HTMLElement, help: HTMLElement) {
     this.root = root;
@@ -42,6 +43,12 @@ export class DebugPanel {
   }
   setConnected(connected: boolean): void {
     this.connected = connected;
+  }
+  /** Show the latest Live state from Max — confirms the M4L → bridge → p5 path. */
+  setLive(s: LiveSessionState): void {
+    const sel = s.selection;
+    const label = sel.clipName || sel.trackName || sel.sceneName || '∅';
+    this.liveSummary = `${s.transport.isPlaying ? '▶' : '⏸'} ${escape(label)} · ${s.transport.tempo.toFixed(0)}bpm · ${escape(sel.clipType)}`;
   }
 
   toggle(): void {
@@ -64,6 +71,9 @@ export class DebugPanel {
         `${this.locked ? '🔒 locked' : '🔓 live'} · ` +
         `${this.connected ? '🔊 bridge' : '○ browser-only'}</div>`,
     );
+    if (this.liveSummary) {
+      lines.push(`<div class="hud-row hud-meta">Live: ${this.liveSummary}</div>`);
+    }
     for (const k of READOUT_KEYS) {
       const v = params[k] as number;
       lines.push(
