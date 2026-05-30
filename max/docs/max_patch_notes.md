@@ -72,6 +72,23 @@ params.update and `/scene` → scene.select (both verified live).
 (The `live.dial`s auto-register as mappable M4L parameters — the start of the
 real device UI; 3b adds layout/labels.)
 
+## 3b — device face (manual Presentation view)
+
+Cosmetic only — the device already works without it. It **can't be reliably
+auto-generated**: MaxPyLang emits `live.dial` as a generic text object (so it
+can't bake presentation/range), and the maxmsp-mcp explicitly *rejects*
+`live.dial`. So this is a hands-on Max step on the device you already have:
+
+1. In the device editor (edit mode), **drag-select the 6 dials** (and the 5
+   scene buttons if you want them on the face).
+2. **Right-click → Add to Presentation** (selected objects get a dashed outline).
+3. Toggle **Presentation** view (the easel icon in the bottom toolbar, or
+   View ▸ Presentation) and **drag the dials into a tidy row**.
+4. **View ▸ Patcher Inspector** → turn **Open in Presentation = On**.
+5. (optional) labels: double-click empty canvas → type `comment` → Enter → type
+   "Density" etc., then Add to Presentation + position under each dial.
+6. **Cmd+S.** The device face in Ableton now shows a clean control panel.
+
 ## Regenerating the patches
 
 ```bash

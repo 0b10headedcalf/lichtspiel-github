@@ -130,5 +130,3 @@ for i, scene in enumerate(SCENES):
 c.connect(*conns)
 c.save(CONTROLS, verbose=False, check=False)
 print("wrote", CONTROLS)
-
-
