@@ -72,14 +72,18 @@ params. See `max/docs/max_patch_notes.md`.
 - ✅ Assembled into a M4L device (Max Audio Effect) + **read-path verified in the
   ADE_Sleuth set**: real tempo (123bpm), selected track name, transport (▶)
   stream to the p5 HUD (`rx` climbing). 2026-05-30.
-- ⬜ **(3a) Device controls → p5 params** (`live.dial`/`live.text` → `/lichtspiel/param`
-  + scene/lock/surprise buttons → `/scene`). Satisfies the "manual controls move
-  p5 params" acceptance. I generate the routing patch; placement is GUI.
-- ⬜ **(3b) Compact device UI** (Status / Source / Visual / Macros — spec §15).
-- ⬜ **(3c) Arrangement playing-clip-per-track** in `live_api_helpers.js` (probe
-  currently = selected track + transport + session highlighted clip).
-- ⬜ (3d, light) clip color + device/macro names (spec §7.2). MIDI content
-  summary is Phase 6.
+- 🟡 **(3a) Device controls → p5 params** — `patches/lichtspiel_controls.maxpat`
+  generated (6 `live.dial`s → `/lichtspiel/param`, 5 scene buttons → `/scene`);
+  bridge path **verified live** (`params.update src=osc`). Remaining: paste into
+  the device + set dial range 0.–1. (GUI). Satisfies the "manual controls move
+  p5 params" acceptance once assembled.
+- 🟡 **(3b) Compact device UI** — the `live.dial`s are a minimal functional UI;
+  layout/labels/status panel (spec §15) later.
+- ✅ **(3c) Playing-clip read** — `live_api_helpers.js` reads the selected
+  track's session `playing_slot_index` clip, then the arrangement clip spanning
+  the playhead (guarded; arrangement property names best-effort → verify in-set).
+- ✅ **(3d) clip color + selected-track device names** (`readClip`/`readDevices`).
+  MIDI content summary is Phase 6.
 
 **Acceptance:** changing the selected clip / toggling transport updates the
 bridge log ✅ · device loads without missing deps ✅ · M4L manual controls move

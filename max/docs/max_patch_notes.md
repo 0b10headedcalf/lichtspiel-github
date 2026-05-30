@@ -50,12 +50,34 @@ once:
 If anything in the patch misbehaves, paste the Max console error back and I'll
 adjust the generator.
 
+## Test C — device controls → p5 params (3a)
+
+Makes the loop bidirectional: knobs in the device push visual params to p5.
+`patches/lichtspiel_controls.maxpat` has 6 `live.dial`s → `[prepend
+/lichtspiel/param <name>]` → `[udpsend 127.0.0.1 7400]` (density, motion,
+palette, cameraDepth, mutationAmount, semanticDistance) + 5 scene message
+buttons → `[prepend /lichtspiel/scene]`. The bridge already maps `/param` →
+params.update and `/scene` → scene.select (both verified live).
+
+1. In the **device editor** (same one from Test B): **File ▸ Open** →
+   `…/max/patches/lichtspiel_controls.maxpat`.
+2. **Cmd+A, Cmd+C** there → click the device canvas → **Cmd+V** (it pastes
+   *alongside* the probe; both share the `udpsend`).
+3. **Set the dial range:** drag-select all 6 `live.dial`s → open the Inspector
+   (Cmd+I) → set **Range/Enum** to `0.` … `1.` (one edit applies to all).
+   Otherwise dials send 0–127 and saturate the param at 1.
+4. **Cmd+S**. Now turning a dial in the device moves that param in the p5 HUD;
+   clicking a scene button switches the visual.
+
+(The `live.dial`s auto-register as mappable M4L parameters — the start of the
+real device UI; 3b adds layout/labels.)
+
 ## Regenerating the patches
 
 ```bash
 python3 -m venv max/.venv
 max/.venv/bin/pip install maxpylang
-max/.venv/bin/python max/build_patches.py    # writes patches/lichtspiel_probe.maxpat (+ js copy)
+max/.venv/bin/python max/build_patches.py    # writes lichtspiel_probe.maxpat + lichtspiel_controls.maxpat (+ js copy)
 ```
 
 `build_patches.py` uses **MaxPyLang** (MIT) to emit valid patcher JSON so we

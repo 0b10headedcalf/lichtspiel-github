@@ -97,3 +97,38 @@ shutil.copy(os.path.join(JS_DIR, "live_api_helpers.js"), os.path.join(HERE, "pat
 print("wrote", OUT, "+ colocated live_api_helpers.js")
 
 
+# ── 3a: controls patch — device knobs/buttons → p5 params/scene over OSC ──────
+# live.dial(name) → [prepend /lichtspiel/param <name>] → [udpsend];
+# scene message boxes → [prepend /lichtspiel/scene] → [udpsend].
+# Paste this alongside the probe in the M4L device. NOTE: set the live.dials'
+# range to 0.–1. in the inspector (select all → Range/Enum 0. to 1.).
+CONTROLS = os.path.join(HERE, "patches", "lichtspiel_controls.maxpat")
+PARAMS = ["density", "motion", "palette", "cameraDepth", "mutationAmount", "semanticDistance"]
+SCENES = ["minimalPulse", "topographicTunnel", "gridWorld", "parquetGlitch", "torusField"]
+
+c = mp.MaxPatch(verbose=False)
+udp = c.place("udpsend 127.0.0.1 7400", starting_pos=[40, 520])[0]
+ensure(udp, 1, 0)
+
+conns = []
+for i, name in enumerate(PARAMS):
+    dial = c.place("live.dial", starting_pos=[40 + i * 110, 60])[0]
+    ensure(dial, 1, 1)
+    pre = c.place("prepend /lichtspiel/param " + name, starting_pos=[40 + i * 110, 160])[0]
+    ensure(pre, 1, 1)
+    conns.append([dial.outs[0], pre.ins[0]])
+    conns.append([pre.outs[0], udp.ins[0]])
+
+scene_pre = c.place("prepend /lichtspiel/scene", starting_pos=[40, 420])[0]
+ensure(scene_pre, 1, 1)
+conns.append([scene_pre.outs[0], udp.ins[0]])
+for i, scene in enumerate(SCENES):
+    msg = c.place("message " + scene, starting_pos=[40 + i * 150, 320])[0]
+    ensure(msg, 1, 1)
+    conns.append([msg.outs[0], scene_pre.ins[0]])
+
+c.connect(*conns)
+c.save(CONTROLS, verbose=False, check=False)
+print("wrote", CONTROLS)
+
+
