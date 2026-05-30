@@ -28,6 +28,7 @@ export class DebugPanel {
   private locked = false;
   private connected = false;
   private liveSummary = '';
+  private liveRx = 0;
 
   constructor(root: HTMLElement, help: HTMLElement) {
     this.root = root;
@@ -44,11 +45,13 @@ export class DebugPanel {
   setConnected(connected: boolean): void {
     this.connected = connected;
   }
-  /** Show the latest Live state from Max — confirms the M4L → bridge → p5 path. */
+  /** Show the latest Live state from Max — confirms the M4L → bridge → p5 path.
+   *  The rx counter visibly ticks per message so "is it live?" is unambiguous. */
   setLive(s: LiveSessionState): void {
     const sel = s.selection;
     const label = sel.clipName || sel.trackName || sel.sceneName || '∅';
-    this.liveSummary = `${s.transport.isPlaying ? '▶' : '⏸'} ${escape(label)} · ${s.transport.tempo.toFixed(0)}bpm · ${escape(sel.clipType)}`;
+    this.liveRx++;
+    this.liveSummary = `${s.transport.isPlaying ? '▶' : '⏸'} ${escape(label)} · ${s.transport.tempo.toFixed(0)}bpm · ${escape(sel.clipType)} · rx ${this.liveRx}`;
   }
 
   toggle(): void {
