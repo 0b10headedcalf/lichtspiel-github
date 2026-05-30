@@ -122,22 +122,58 @@ body {
   border-color: rgba(142, 255, 192, 0.4);
 }
 
-/* ── Monome emulator ─────────────────────────────────────────────── */
+/* ── Monome digital-twin dashboard ───────────────────────────────── */
 .monome {
   position: fixed;
   bottom: 12px;
   right: 12px;
   padding: 12px;
-  background: rgba(8, 10, 14, 0.72);
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  background: rgba(8, 10, 14, 0.78);
   border: 1px solid rgba(120, 200, 255, 0.18);
   border-radius: 10px;
   z-index: 10;
   backdrop-filter: blur(6px);
+  color: #cfe8ff;
 }
-.emu-label {
-  font-size: 10px;
-  color: #7e93a8;
+.twin-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #7fd0ff;
   margin-bottom: 8px;
+}
+.twin-caps {
+  font-size: 10px;
+  line-height: 1.5;
+  color: #9fb3c8;
+  white-space: pre-line;
+  margin-bottom: 8px;
+}
+.twin-canvas {
+  display: block;
+  margin: 0 auto;
+}
+.twin-tests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+  max-width: 460px;
+}
+.twin-check {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #8effc0;
+}
+.twin-log {
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #7e93a8;
+  white-space: pre-line;
+  min-height: 16px;
 }
 .emu-switch {
   display: flex;
@@ -160,35 +196,6 @@ body {
   color: #04121f;
   border-color: rgba(127, 208, 255, 0.9);
 }
-.emu-gridwrap {
-  display: flex;
-  justify-content: center;
-}
-.emu-grid {
-  display: grid;
-  gap: 3px;
-}
-.emu-cell {
-  aspect-ratio: 1;
-  --lvl: 0;
-  border: 1px solid rgba(120, 200, 255, 0.22);
-  border-radius: 3px;
-  background: rgba(120, 200, 255, calc(0.06 + var(--lvl) * 0.9));
+.twin-canvas {
   cursor: pointer;
-  padding: 0;
-}
-.emu-cell:active {
-  background: rgba(127, 208, 255, 0.85);
-}
-.emu-arcs {
-  display: flex;
-  gap: 12px;
-  margin-top: 10px;
-  justify-content: center;
-}
-.emu-ring {
-  cursor: grab;
-}
-.emu-ring:active {
-  cursor: grabbing;
 }

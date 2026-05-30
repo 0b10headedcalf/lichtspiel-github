@@ -93,5 +93,5 @@ export const KEYBOARD_HELP = [
   '← → semantic distance · ↑ ↓ mutation',
   '[ ] density · - = motion',
   'space lock · r randomize · s surprise',
-  'd debug · g monome emulator',
+  'd debug · g monome twin',
 ].join('\n');

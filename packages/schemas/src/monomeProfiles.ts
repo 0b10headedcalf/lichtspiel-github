@@ -17,6 +17,30 @@ import type { DeviceAttached } from './monome.js';
 export type GridSize = '64' | '128' | 'other';
 export type ArcSize = '2' | '4' | 'other';
 
+/**
+ * Grid capabilities/limitations. Differ across editions/classes — sketches +
+ * mappings must adapt rather than assume. `varibright` = per-LED 0..15 via
+ * /grid/led/level/*; if false the hardware is monobright (binary /grid/led/set
+ * + one global /grid/led/intensity) and the 0..15 levels are logical-only.
+ * `tilt` = has an accelerometer (/grid/tilt). `quads` = number of 8×8 LED-map
+ * blocks (64 → 1, 128 → 2).
+ */
+export interface GridCaps {
+  cells: number;
+  quads: number;
+  ledLevels: number;
+  varibright: boolean;
+  tilt: boolean;
+}
+
+/** Arc capabilities. `push` = encoders are clickable (arc key events). */
+export interface ArcCaps {
+  encoders: number;
+  ringLeds: number;
+  ledLevels: number;
+  push: boolean;
+}
+
 export interface GridProfile {
   kind: 'grid';
   serial: string | null;
@@ -24,6 +48,7 @@ export interface GridProfile {
   cols: number;
   size: GridSize;
   label: string;
+  caps: GridCaps;
 }
 
 export interface ArcProfile {
@@ -33,6 +58,7 @@ export interface ArcProfile {
   ringLeds: number;
   size: ArcSize;
   label: string;
+  caps: ArcCaps;
 }
 
 export interface MonomeSetup {
@@ -47,6 +73,7 @@ export const GRID_64: GridProfile = Object.freeze({
   cols: 8,
   size: '64',
   label: 'Grid 64',
+  caps: { cells: 64, quads: 1, ledLevels: 16, varibright: true, tilt: true },
 });
 
 export const GRID_128: GridProfile = Object.freeze({
@@ -56,6 +83,7 @@ export const GRID_128: GridProfile = Object.freeze({
   cols: 16,
   size: '128',
   label: 'Grid 128',
+  caps: { cells: 128, quads: 2, ledLevels: 16, varibright: true, tilt: true },
 });
 
 export const ARC_2: ArcProfile = Object.freeze({
@@ -65,6 +93,7 @@ export const ARC_2: ArcProfile = Object.freeze({
   ringLeds: 64,
   size: '2',
   label: 'Arc 2',
+  caps: { encoders: 2, ringLeds: 64, ledLevels: 16, push: true },
 });
 
 export const ARC_4: ArcProfile = Object.freeze({
@@ -74,6 +103,7 @@ export const ARC_4: ArcProfile = Object.freeze({
   ringLeds: 64,
   size: '4',
   label: 'Arc 4',
+  caps: { encoders: 4, ringLeds: 64, ledLevels: 16, push: true },
 });
 
 export const KNOWN_GRIDS: Record<string, GridProfile> = {
@@ -111,6 +141,15 @@ export function profileFromAttached(d: DeviceAttached): GridProfile | ArcProfile
       cols,
       size: cols > 8 ? '128' : cols === 8 && rows === 8 ? '64' : 'other',
       label: `Grid ${rows * cols}`,
+      // varibright/tilt can't be known from device.attached alone — assume the
+      // modern capability set; the bridge can refine it from a sys/info query.
+      caps: {
+        cells: rows * cols,
+        quads: Math.ceil(cols / 8) * Math.ceil(rows / 8),
+        ledLevels: 16,
+        varibright: true,
+        tilt: true,
+      },
     };
   }
   const known = arcProfileForSerial(d.id);
@@ -123,6 +162,7 @@ export function profileFromAttached(d: DeviceAttached): GridProfile | ArcProfile
     ringLeds: 64,
     size: encoders >= 4 ? '4' : encoders === 2 ? '2' : 'other',
     label: `Arc ${encoders}`,
+    caps: { encoders, ringLeds: 64, ledLevels: 16, push: true },
   };
 }
 

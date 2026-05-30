@@ -23,7 +23,7 @@ import { TEMPLATES } from './templates/index.js';
 import { installKeyboard } from './keyboard.js';
 import { createMonomeMapping } from './monomeMapping.js';
 import { DebugPanel } from './ui/debugPanel.js';
-import { MonomeEmulator } from './ui/monomeEmulator.js';
+import { MonomeTwin } from './ui/monomeTwin.js';
 import { BridgeClient } from './transport/bridgeClient.js';
 import { randomizeParams, mutateParams } from './mutations/paramMutation.js';
 import { createRng, randomSeed } from './seededRng.js';
@@ -33,7 +33,7 @@ import type { VisualTemplate } from './visualTemplate.js';
 const stage = document.getElementById('stage') as HTMLElement;
 const hud = document.getElementById('hud') as HTMLElement;
 const hudHelp = document.getElementById('hud-help') as HTMLElement;
-const emulatorEl = document.getElementById('monome-emulator') as HTMLElement;
+const twinEl = document.getElementById('monome-twin') as HTMLElement;
 const connEl = document.getElementById('conn') as HTMLElement;
 
 // ── Core wiring ──────────────────────────────────────────────────────
@@ -42,11 +42,11 @@ const registry = new TemplateRegistry();
 registry.registerAll(TEMPLATES);
 
 // Active monome setup — defaults to the primary target (grid 64 + arc 2),
-// updated by the emulator switcher or a real device.attached from the bridge.
+// updated by the twin's device switch or a real device.attached from the bridge.
 let setup: MonomeSetup = DEFAULT_SETUP;
 
 const debug = new DebugPanel(hud, hudHelp);
-const emulator = new MonomeEmulator(emulatorEl, bus, setup);
+const twin = new MonomeTwin(twinEl, bus, setup);
 
 const host = new SketchHost({
   parent: stage,
@@ -55,7 +55,7 @@ const host = new SketchHost({
     debug.setTemplateName(registry.get(templateId)?.name ?? templateId);
     debug.updateFrame(fps, params);
   },
-  onLedFrameDirty: (frame) => emulator.reflect(frame),
+  onLedFrameDirty: (frame) => twin.reflect(frame),
 });
 
 let locked = false;
@@ -130,13 +130,13 @@ bus.on('monome.setup', (s) => {
 bus.on('device.attached', (d) => {
   const prof = profileFromAttached(d);
   setup = prof.kind === 'grid' ? { ...setup, grid: prof } : { ...setup, arc: prof };
-  emulator.setSetup(setup);
+  twin.setSetup(setup);
   console.info(`[lichtspiel] device attached → ${describeSetup(setup)}`);
 });
 bus.on('device.detached', (d) => {
   if (setup.grid?.serial === d.id) setup = { ...setup, grid: null };
   if (setup.arc?.serial === d.id) setup = { ...setup, arc: null };
-  emulator.setSetup(setup);
+  twin.setSetup(setup);
 });
 
 // ── Keyboard handlers ────────────────────────────────────────────────
@@ -184,7 +184,7 @@ installKeyboard({
   randomize: doRandomize,
   surprise: doSurprise,
   toggleDebug: () => debug.toggle(),
-  toggleEmulator: () => emulator.toggle(),
+  toggleEmulator: () => twin.toggle(),
 });
 
 // ── Optional bridge connection ───────────────────────────────────────
@@ -197,5 +197,5 @@ const first = registry.at(0);
 if (first) host.mount(first);
 console.info(
   `[lichtspiel] p5 runtime up — ${registry.size} templates. ` +
-    `Press 'd' for HUD, 'g' for the monome emulator. Bridge: ${wsUrl} (optional).`,
+    `Press 'd' for HUD, 'g' for the monome digital twin. Bridge: ${wsUrl} (optional).`,
 );

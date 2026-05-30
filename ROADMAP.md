@@ -76,21 +76,24 @@ owns two device classes — Grid 64 (`m64_0175`) / Arc 2 (`m0000174`) and Grid 1
 (`m29496721`) / Arc 4 (`m0000007`) — and the app detects + adapts. The canonical
 control idiom is `Lichtspiel_v3` (the idiom master). See `docs/monome.md`.
 
-- ✅ Device profile model (`schemas/monomeProfiles.ts`) + `profileFromAttached()`.
+- ✅ Device profile model + **capability matrix** (`schemas/monomeProfiles.ts`,
+  `GridCaps`/`ArcCaps`: cells/quads/varibright/tilt, encoders/push) +
+  `profileFromAttached()`.
 - ✅ Profile-aware **column-fader** mapping (`monomeMapping.ts`) — the
   `Lichtspiel_v3` idiom generalized to `VisualParamVector`; adapts to grid width
   (grid-128 cols 8–15 → scene buttons) + arc encoder count (arc-4 adds enc2/3).
-- ✅ On-screen emulator with a Grid 64/128 + Arc 2/4 switcher (simulated
-  detection) — verified adapting live (16 cols / 4 rings) + driving params.
-- ✅ `device.attached`/`device.detached` routed bridge → bus → active setup.
+- ✅ **Digital-twin dashboard** (`ui/monomeTwin.ts`) — combines the windchime
+  virtual-monome (LED mirror) + diagnostic7 capability tests: canvas twin
+  (varibright cells + level readout + 64-LED rings), test sweeps, capability
+  panel, seen-checklist, event log, interactive input, Grid 64/128 + Arc 2/4
+  switch. Verified adapting live (8×8↔16×8, 2↔4 rings) + driving params.
+- ✅ `device.attached`/`device.detached` routed bridge → bus → active setup → twin.
 - ⬜ serialosc layer in `live-bridge` (adapt windchime-animation `serialosc.ts`):
   discover devices, emit `device.attached/detached` + `grid.key`/`arc.delta`/
-  `arc.key`, flush `led.*`/`ring.*`.
-- ⬜ LED/ring feedback as fader-style state (templates write `ledOut`; host
-  flushes; LED width follows the active grid).
+  `arc.key`, flush `led.*`/`ring.*` (twin test patterns → real hardware LEDs).
+- ⬜ LED/ring feedback from templates (write `ledOut`; host flushes; width
+  follows the active grid; honor varibright vs monobright `caps`).
 - ⬜ Debounce/rate-limit so input flooding never freezes the patch/browser.
-- ⬜ Connection/diagnostics **dashboard** UI (ref: `processing_corpus_g64arc2/
-  monome_grid64_arc2_diagnostic1–7`; v7 = full-capability + parallel LED sweep).
 
 **Acceptance:** grid column-faders move params · grid press selects scenes ·
 arc encoders morph continuously · LEDs reflect values · plugging in grid 64 vs
