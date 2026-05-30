@@ -57,7 +57,7 @@ Message bus between Max and p5.
 **Acceptance:** CLI changes the p5 scene ✓ · CLI sends a fake `LiveSessionState` ✓ ·
 p5 responds ✓ · reconnect works ✓ (bridge self-test green).
 
-## Phase 3 — Max for Live Live API probe 🟡 (bridge done; .amxd needs Max GUI)
+## Phase 3 — Max for Live Live API probe ✅ (verified in a real Live set)
 
 Read real Live state and feed it to p5 over OSC. See `max/docs/max_patch_notes.md`.
 
@@ -67,11 +67,13 @@ Read real Live state and feed it to p5 over OSC. See `max/docs/max_patch_notes.m
 - ✅ `js/live_api_helpers.js` — reads transport + selected track/scene/clip via
   `LiveAPI`, emits a `LiveSessionState` JSON symbol (guarded; degrades to default).
 - ✅ Generated probe patch `patches/lichtspiel_probe.maxpat` (`build_patches.py`
-  via MaxPyLang): loadbang/metro → js → prepend → udpsend.
-- 🟡 Assemble + save `devices/LichtspielHub.amxd` in the Max GUI (add
-  `live.thisdevice` + device UI) — **human-in-the-loop**.
-- ⬜ Verify in a real Live set (clip selection updates the bridge log → p5).
+  via MaxPyLang): loadbang/metro/`live.thisdevice` → js → prepend → udpsend.
+- ✅ Assembled into a M4L device (Max Audio Effect) + **verified in the
+  ADE_Sleuth set**: real tempo (123bpm), selected track name, transport (▶)
+  stream to the p5 HUD (`rx` climbing). 2026-05-30.
 - ⬜ Expose Live params (`live.dial`) → `/lichtspiel/param`; compact device UI.
+- ⬜ Read arrangement playing-clip-per-track (probe currently does selected
+  track + transport + session highlighted clip).
 
 **Acceptance:** changing the selected clip / toggling transport updates the
 bridge log · device loads without missing deps · M4L manual controls move p5
