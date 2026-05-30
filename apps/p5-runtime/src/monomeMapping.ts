@@ -36,6 +36,14 @@ export const COLUMN_AXES: readonly NumericParamKey[] = [
   'strobe',
 ];
 
+/** Arc encoder → param axis. enc0/1 on an Arc 2; enc2/3 added on an Arc 4. */
+export const ARC_AXES: readonly NumericParamKey[] = [
+  'semanticDistance',
+  'mutationAmount',
+  'motion',
+  'palette',
+];
+
 export interface MonomeHandlers {
   /** Set a param to an absolute 0..1 value (grid fader). */
   setParam(key: NumericParamKey, value: number): void;
@@ -75,22 +83,8 @@ export function createMonomeMapping(
 
     onArcDelta(e: ArcDeltaEvent): void {
       const step = e.delta / 64; // arc rings are 64 LEDs (v3 convention)
-      switch (e.encoder) {
-        case 0:
-          h.nudgeParam('semanticDistance', step);
-          break;
-        case 1:
-          h.nudgeParam('mutationAmount', step);
-          break;
-        case 2:
-          h.nudgeParam('motion', step);
-          break;
-        case 3:
-          h.nudgeParam('palette', step);
-          break;
-        default:
-          break;
-      }
+      const axis = ARC_AXES[e.encoder];
+      if (axis) h.nudgeParam(axis, step);
     },
 
     onArcKey(e: ArcKeyEvent): void {

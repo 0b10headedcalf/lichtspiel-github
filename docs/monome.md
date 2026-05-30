@@ -113,43 +113,62 @@ reads it on every event, so swapping devices needs no re-wiring.
   right dimensions and the mapping adapts live. Verified: switching to Grid 128
   shows 16 columns, Arc 4 shows 4 rings, and column-faders drive the mapped
   params.
-- **Phase 4 (real hardware):** the bridge's serialosc layer sends
-  `device.attached` (with rows/cols/encoders); `bridgeClient` routes it →
-  `profileFromAttached()` resolves a profile → the active setup + emulator
-  update via the same path.
+- **Real hardware (Phase 4, ✅ done + verified on Grid 64 + Arc 2):** the
+  bridge's serialosc layer (`apps/live-bridge/src/serialosc.ts`) discovers the
+  device and sends `device.attached` (with rows/cols/encoders); `bridgeClient`
+  routes it → `profileFromAttached()` resolves a profile → the active setup +
+  twin update via the same path. Live discovery confirmed against serialoscd
+  1.4.7 on the user's real `m64_0175` + `m0000174`.
 
-## Digital-twin dashboard (built)
+## Digital-twin dashboard + LED feedback (built ✅)
 
-`apps/p5-runtime/src/ui/monomeTwin.ts` is **one dashboard** that combines the
-windchime virtual-monome panel (mirrors the live LED frame) with the
-`monome_grid64_arc2_diagnostic7` capability checks. Toggle with `g`. It:
+`apps/p5-runtime/src/ui/monomeTwin.ts` is **one dashboard** + the **single LED
+authority**: its canvas and the real hardware render from the *same* per-cell /
+per-ring level functions (in `ui/monomeFeedback.ts`), so "what the twin shows"
+always equals "what the LEDs show". It emits the current frame to the bridge at
+~30 Hz regardless of dashboard visibility. Toggle the view with `g`. It:
 
-- draws a **digital twin** of the connected hardware on a canvas — varibright
-  grid cells with 0–15 level readouts + 64-LED arc rings with a position
-  marker — adapting to the active profile (8×8 ↔ 16×8, 2 ↔ 4 rings);
-- **mirrors** the host LED frame when idle, or runs a **test pattern**: All on /
-  Checker / Ramp / Row sweep / Col sweep / Arc fill / Arc grad / Arc ticks /
-  Auto sweep / Fast ∥ (parallel) — the capability checks adapted from v7;
+- draws a **digital twin** of the connected hardware — grid cells with 0–15
+  level readouts (scaled by the global dimmer) + 64-LED arc rings — adapting to
+  the active profile (8×8 ↔ 16×8, 2 ↔ 4 rings);
+- **Mirror (performance) mode** — the controller mirrors what you're doing:
+  grid columns are **VU fader bars from the live `VisualParamVector`** (the
+  `COLUMN_AXES` map; a held cell flashes; grid-128 cols 8–15 = scene buttons),
+  and arc rings show each mapped param (`ARC_AXES`) as a **filled arc + a
+  glowing comet head + every-8th orientation ticks + a press boost** (the
+  `diagnostic7` `updateArcRing` aesthetic, driven by value). If a *template*
+  writes a non-empty `ledOut`, that is mirrored instead.
+- **diagnostic sweeps** (adapted from `diagnostic7`, dims-adaptive, looping):
+  `Auto sweep` = sequential (gridBinary / varibright / **intensity** / row /
+  col / map → arcGradient / brightness / ticks / range / pulse / spin) and
+  `Fast ∥` = grid stages **in parallel with** arc stages. Plus quick one-shot
+  tests: All on / Checker / Ramp / **Intensity** (global-dimmer breath) / Row /
+  Col / Arc fill / Arc grad / Arc ticks. The active stage shows in the label.
 - is **interactive** (click cells, drag rings, click ring centers) — emitting
-  the same MonomeEvent shapes the bridge will, so it doubles as the
-  no-hardware input device;
+  the same MonomeEvent shapes the bridge does, so it doubles as the no-hardware
+  input device;
 - shows a **capability panel** (cells/quads/varibright/tilt · encoders/push),
-  a **seen-checklist** (grid.key / arc.delta / arc.key), and a live **event
-  log**;
+  a **seen-checklist** (grid.key / arc.delta / arc.key), and a live **event log**;
 - has a **Grid 64/128 + Arc 2/4 switch** that simulates device detection.
 
-With real hardware (Phase 4) the same LED frame flushes to the device over the
-bridge and real `device.attached` / `grid.key` / `arc.*` events drive the twin.
-Source diagnostics for reference: `processing_corpus_g64arc2/
-monome_grid64_arc2_diagnostic1–7` (v7 = full capability + fast parallel sweep).
+The same LED frame flushes to the device over the bridge and real
+`device.attached` / `grid.key` / `arc.*` events drive the twin — verified
+end-to-end on the real Grid 64 + Arc 2 (2026-05-31). Source diagnostics for
+reference: `processing_corpus_g64arc2/monome_grid64_arc2_diagnostic1–7`
+(v7 = full capability + fast parallel sweep).
 
-## serialosc OSC contract (Phase 4 `live-bridge` spec)
+## serialosc OSC contract (implemented in `serialosc.ts` ✅)
 
-The bridge talks **raw serialosc OSC** (higher-level wrappers caused grid/arc
-routing conflicts in the source project — avoid them). Ports: serialosc on
-`12002` (`LICHTSPIEL_SERIALOSC_PORT`), the app listens on `13333`
-(`LICHTSPIEL_OSC_APP_PORT`), with a chosen prefix (`LICHTSPIEL_OSC_PREFIX`,
-e.g. `/lichtspiel`).
+Implemented in `apps/live-bridge/src/serialosc.ts` (pure-Node `dgram` + our
+`oscCodec`, NO osc-js). The bridge talks **raw serialosc OSC** (higher-level
+wrappers caused grid/arc routing conflicts in the source project — avoid them).
+Inbound OSC is routed to the right device **by UDP source port** (not "guess by
+kind"). Ports: serialosc on `12002` (`LICHTSPIEL_SERIALOSC_PORT`), the app binds
++ listens on `13333` (`LICHTSPIEL_OSC_APP_PORT`), with a chosen prefix
+(`LICHTSPIEL_OSC_PREFIX`, e.g. `/lichtspiel`). A single ~30 Hz scheduler
+(`LICHTSPIEL_LED_HZ`) coalesces arc deltas + throttles LED flushes; hot-plug is
+handled (re-arm notify + periodic re-list + dedup). Verified by
+`pnpm --filter @lichtspiel/live-bridge test:serialosc` (no hardware needed).
 
 Discovery + per-device config:
 ```

@@ -89,7 +89,7 @@ params. See `max/docs/max_patch_notes.md`.
 bridge log ✅ · device loads without missing deps ✅ · M4L manual controls move
 p5 params ⬜ (3a) · device works when ML service is offline ✅.
 
-## Phase 4 — Monome integration & device adaptation 🟡
+## Phase 4 — Monome integration & device adaptation ✅
 
 Grid/arc control p5, **adapting to whichever device is connected**. The user
 owns two device classes — Grid 64 (`m64_0175`) / Arc 2 (`m0000174`) and Grid 128
@@ -108,16 +108,38 @@ control idiom is `Lichtspiel_v3` (the idiom master). See `docs/monome.md`.
   panel, seen-checklist, event log, interactive input, Grid 64/128 + Arc 2/4
   switch. Verified adapting live (8×8↔16×8, 2↔4 rings) + driving params.
 - ✅ `device.attached`/`device.detached` routed bridge → bus → active setup → twin.
-- ⬜ serialosc layer in `live-bridge` (adapt windchime-animation `serialosc.ts`):
-  discover devices, emit `device.attached/detached` + `grid.key`/`arc.delta`/
-  `arc.key`, flush `led.*`/`ring.*` (twin test patterns → real hardware LEDs).
-- ⬜ LED/ring feedback from templates (write `ledOut`; host flushes; width
-  follows the active grid; honor varibright vs monobright `caps`).
-- ⬜ Debounce/rate-limit so input flooding never freezes the patch/browser.
+- ✅ serialosc layer in `live-bridge` (`serialosc.ts`, adapted from windchime-animation
+  to pure-Node `dgram` + our `oscCodec`, NO osc-js): discovers devices via
+  serialosc (list/notify + `/sys/port|host|prefix|info`), resolves profiles by
+  serial, emits `device.attached/detached` + `grid.key`/`arc.delta`/`arc.key`
+  (routed to the right device by UDP source port), and flushes `led.*`/`ring.*`
+  caps-aware (monobright grid → binarized `grid/led/map` + global intensity;
+  varibright → `level/map`; arc → `ring/map`). Robust hot-plug (re-arm notify +
+  periodic re-list + dedup). Verified by `test:serialosc` (no hardware needed).
+- ✅ Debounce/rate-limit: one ~30 Hz scheduler drains coalesced arc deltas
+  (a fast spin sums into one event) and throttles LED flushes — input flooding
+  can't freeze the browser/hardware.
+- ✅ **Interactive LED feedback** (`ui/monomeFeedback.ts`): in Mirror mode the
+  grid columns are **VU fader bars from the live params** (COLUMN_AXES; held
+  cell flashes; grid-128 cols 8–15 = scene buttons) and the arc rings show each
+  mapped param (ARC_AXES) as a **filled arc + diagnostic7 comet head + every-8th
+  ticks + press boost**. The twin canvas and the hardware render from the *same*
+  frame (the twin is the single LED authority), so they can't drift. Optional
+  `gridIntensity` on the LED frame drives the monobright grid's global dimmer —
+  a dedicated **Intensity** test breathes it 0→15→0, and the twin canvas scales
+  cell brightness by it so the dimmer reads on the twin too.
+- ✅ **Diagnostic sweeps** restored from diagnostic7: `Auto sweep` = sequential
+  (binary/varibright/intensity/row/col/map → gradient/brightness/ticks/range/
+  pulse/spin) and `Fast ∥` = grid stages ∥ arc stages, both dims-adaptive
+  (grid 64/128, arc 2/4) and looping. A template can still drive its own
+  `ledOut` (host path intact); the param-driven feedback covers it until one does.
 
-**Acceptance:** grid column-faders move params · grid press selects scenes ·
-arc encoders morph continuously · LEDs reflect values · plugging in grid 64 vs
-128 / arc 2 vs 4 adapts the surface · rapid input never freezes.
+**Acceptance:** grid column-faders move params ✅ · grid press selects scenes ✅ ·
+arc encoders morph continuously ✅ · LEDs reflect values ✅ · plugging in grid 64
+vs 128 / arc 2 vs 4 adapts the surface ✅ · rapid input never freezes ✅.
+**Hardware-verified on the real Grid 64 + Arc 2 (2026-05-31):** live discovery,
+input (grid.key/arc.delta/arc.key incl. coalesced deltas), performance feedback
+(fader columns + arc comets), and the Fast ∥ sweep all confirmed end-to-end.
 
 ## Phase 5 — Metadata retrieval 🟡 (head start shipped)
 

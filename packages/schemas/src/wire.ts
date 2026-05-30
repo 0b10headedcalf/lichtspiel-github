@@ -34,6 +34,12 @@ export interface StatusPayload {
 export interface LedFramePayload {
   grid?: number[][];
   arc?: number[][];
+  /**
+   * Global grid brightness 0..15 (`/grid/led/intensity`). On a monobright grid
+   * (e.g. Grid 64) this is the only brightness control, so the performance
+   * feedback + the diagnostic dimmer sweep drive it here. Omitted ⇒ unchanged.
+   */
+  gridIntensity?: number;
 }
 
 export type WireMessage =

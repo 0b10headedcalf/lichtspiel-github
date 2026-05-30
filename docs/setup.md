@@ -37,7 +37,7 @@ Keyboard control (mirrors the monome mappings):
 | `←` `→` | semantic distance · `↑` `↓` mutation amount |
 | `[` `]` | density · `-` `=` motion |
 | `space` | lock/unlock · `r` randomize safe params · `s` surprise |
-| `d` | toggle diagnostics HUD · `g` toggle on-screen monome emulator |
+| `d` | toggle diagnostics HUD · `g` toggle the monome digital twin (LED feedback + sweeps) |
 
 ## Run the full local stack
 
@@ -54,6 +54,13 @@ pnpm send retrieval parquetGlitch --reason "dense + fragmented" --density 0.9
 
 Then open Ableton Live and load `max/devices/LichtspielHub.amxd` (Phase 3).
 
+With **serialosc + a monome** plugged in, the bridge auto-discovers it (watch
+for `monome attached …` in the bridge log) and `/status` shows
+`monomeConnected:true`. Grid columns are param faders and the arc encoders morph
+params; the grid/arc LEDs **mirror the performance** (fader bars + arc rings).
+Press `g` to open the digital twin — its **Auto sweep** / **Fast ∥** /
+**Intensity** buttons run the capability sweeps directly on the hardware.
+
 ## ML sidecar (later phases)
 
 ```bash
@@ -68,7 +75,9 @@ python -m lichtspiel_ml.app        # stub HTTP service on :7892 (health + stub r
 pnpm -r typecheck
 pnpm validate:schemas
 pnpm smoke:p5
-pnpm --filter @lichtspiel/live-bridge test
+pnpm --filter @lichtspiel/live-bridge test            # WS hub self-test
+pnpm --filter @lichtspiel/live-bridge test:osc        # Max→bridge→p5 OSC path
+pnpm --filter @lichtspiel/live-bridge test:serialosc  # monome discovery/routing/LED flush (no hardware)
 pnpm --filter @lichtspiel/p5-runtime build
 ```
 

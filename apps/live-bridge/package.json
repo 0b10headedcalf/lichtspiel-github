@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "cli": "tsx src/cli.ts",
     "test": "tsx src/selftest.ts",
-    "test:osc": "tsx src/osc-selftest.ts"
+    "test:osc": "tsx src/osc-selftest.ts",
+    "test:serialosc": "tsx src/serialosc-selftest.ts"
   },
   "dependencies": {
     "@lichtspiel/schemas": "workspace:*",

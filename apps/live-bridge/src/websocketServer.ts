@@ -7,6 +7,7 @@
 
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
+  type LedFramePayload,
   type StatusPayload,
   type WireMessage,
   type WireRole,
@@ -28,6 +29,8 @@ export interface BridgeServerOptions {
   port: number;
   /** Notified whenever client roster changes (for the HTTP status route). */
   onStatusChange?: (status: StatusPayload) => void;
+  /** Sink for outbound LED frames (Phase 4: the serialosc layer flushes them). */
+  onLedFrame?: (frame: LedFramePayload) => void;
 }
 
 export class BridgeServer {
@@ -35,6 +38,7 @@ export class BridgeServer {
   private readonly clients = new Map<WebSocket, Client>();
   private nextId = 1;
   private lastError: string | undefined;
+  private monomeConnected = false;
   private readonly opts: BridgeServerOptions;
 
   constructor(opts: BridgeServerOptions) {
@@ -93,9 +97,16 @@ export class BridgeServer {
     this.routeMessage(m, `${client.role}#${client.id}`);
   }
 
-  /** Route a wire message from a non-WebSocket source (e.g. OSC from Max). */
+  /** Route a wire message from a non-WebSocket source (e.g. OSC from Max, monome). */
   ingest(m: WireMessage): void {
     this.routeMessage(m, 'osc');
+  }
+
+  /** Reflect monome hardware presence in /status (set by the serialosc layer). */
+  setMonomeConnected(connected: boolean): void {
+    if (this.monomeConnected === connected) return;
+    this.monomeConnected = connected;
+    this.emitStatus();
   }
 
   private routeMessage(m: WireMessage, src: string): void {
@@ -133,6 +144,9 @@ export class BridgeServer {
     }
 
     if (isType(m, 'led.frame')) {
+      // p5 (templates + digital twin) → hardware via the serialosc layer, and
+      // on to any Max client that wants to mirror it.
+      this.opts.onLedFrame?.(m.payload);
       this.broadcast(['max'], m);
       return;
     }
@@ -163,7 +177,7 @@ export class BridgeServer {
       bridge: true,
       p5Clients,
       maxConnected,
-      monomeConnected: false,
+      monomeConnected: this.monomeConnected,
       mlConnected: false,
       ...(this.lastError ? { lastError: this.lastError } : {}),
     };

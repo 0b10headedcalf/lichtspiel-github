@@ -52,7 +52,6 @@ async function main(): Promise<void> {
     host: HOST,
     maxToBridgePort: OSC_PORT,
     bridgeToMaxPort: OSC_PORT + 1,
-    serialoscPort: 12002,
     prefix: PREFIX,
     onMessage: (m) => server.ingest(m),
   });

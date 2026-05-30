@@ -8,6 +8,7 @@
 
 import './style.css';
 import {
+  type LedFramePayload,
   type MonomeSetup,
   type NumericParamKey,
   type VisualParamVector,
@@ -15,6 +16,7 @@ import {
   clamp01,
   describeSetup,
   profileFromAttached,
+  wire,
 } from '@lichtspiel/schemas';
 import { createBus } from './messageBus.js';
 import { SketchHost } from './sketchHost.js';
@@ -46,7 +48,16 @@ registry.registerAll(TEMPLATES);
 let setup: MonomeSetup = DEFAULT_SETUP;
 
 const debug = new DebugPanel(hud, hudHelp);
-const twin = new MonomeTwin(twinEl, bus, setup);
+
+// Bridge client (optional) — created early so the twin + sketch host can forward
+// LED frames to it. The connection is opened at the very end, once every bus
+// handler is registered. Forwarding a led.frame reaches real monome hardware via
+// the bridge's serialosc layer (and is a no-op in browser-only mode).
+const wsUrl = `ws://${__BIND_HOST__}:${__BRIDGE_WS_PORT__}`;
+const bridge = new BridgeClient({ url: wsUrl, bus });
+const sendLedFrame = (payload: LedFramePayload): void => bridge.send(wire('led.frame', payload));
+
+const twin = new MonomeTwin(twinEl, bus, setup, sendLedFrame);
 
 const host = new SketchHost({
   parent: stage,
@@ -54,7 +65,12 @@ const host = new SketchHost({
   onFrame: ({ fps, params, templateId }) => {
     debug.setTemplateName(registry.get(templateId)?.name ?? templateId);
     debug.updateFrame(fps, params);
+    // Feed the live visual state to the twin so the monome LEDs mirror it
+    // (grid column faders + arc rings) in performance mode.
+    twin.setFeedback(params, registry.all().findIndex((t) => t.id === templateId), registry.size);
   },
+  // Sketch ledOut → the twin, which is the single LED authority and flushes the
+  // resulting frame (template LEDs, performance feedback, or a sweep) to hardware.
   onLedFrameDirty: (frame) => twin.reflect(frame),
 });
 
@@ -189,8 +205,7 @@ installKeyboard({
 });
 
 // ── Optional bridge connection ───────────────────────────────────────
-const wsUrl = `ws://${__BIND_HOST__}:${__BRIDGE_WS_PORT__}`;
-const bridge = new BridgeClient({ url: wsUrl, bus });
+// (bridge + wsUrl are created above so the twin + host can forward LED frames.)
 bridge.connect();
 
 // ── Boot ─────────────────────────────────────────────────────────────

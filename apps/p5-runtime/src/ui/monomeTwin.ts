@@ -25,22 +25,41 @@ import {
   type ArcDeltaEvent,
   type GridKeyEvent,
   type LedFrame,
+  type LedFramePayload,
   type MonomeSetup,
+  type VisualParamVector,
   ARC_2,
   ARC_4,
   ARC_RING_LEDS,
+  DEFAULT_PARAMS,
   DEFAULT_SETUP,
   GRID_64,
   GRID_128,
+  LED_LEVEL_MAX,
   describeSetup,
 } from '@lichtspiel/schemas';
 import type { AppBus } from '../messageBus.js';
+import {
+  type PerfState,
+  PERF_GRID_INTENSITY,
+  breathIntensity,
+  perfArcLevel,
+  perfGridLevel,
+  sweepArcLevel,
+  sweepGridIntensity,
+  sweepGridLevel,
+  sweepStageLabel,
+} from './monomeFeedback.js';
+
+/** Steady cadence (≈30 Hz) at which the current LED frame is pushed to hardware. */
+const LED_EMIT_MS = 33;
 
 type TestMode =
   | null
   | 'all'
   | 'checker'
   | 'ramp'
+  | 'intensity'
   | 'row'
   | 'col'
   | 'arcFill'
@@ -53,6 +72,7 @@ const TEST_BUTTONS: Array<{ id: Exclude<TestMode, null>; label: string }> = [
   { id: 'all', label: 'All on' },
   { id: 'checker', label: 'Checker' },
   { id: 'ramp', label: 'Ramp' },
+  { id: 'intensity', label: 'Intensity' },
   { id: 'row', label: 'Row sweep' },
   { id: 'col', label: 'Col sweep' },
   { id: 'arcFill', label: 'Arc fill' },
@@ -69,6 +89,7 @@ const RING_R = 40;
 export class MonomeTwin {
   private readonly root: HTMLElement;
   private readonly bus: AppBus;
+  private readonly onLedFrame: ((frame: LedFramePayload) => void) | undefined;
   private setup: MonomeSetup;
 
   private canvas!: HTMLCanvasElement;
@@ -87,10 +108,17 @@ export class MonomeTwin {
   private arcHeld: boolean[] = [];
   private mirrorGrid: number[][] = [];
   private mirrorArc: number[][] = [];
+  /** True while a template's ledOut is non-empty → mirror it instead of perf feedback. */
+  private hostFrameActive = false;
   private testMode: TestMode = null;
   private testStart = 0;
   private seen = { grid: false, arcDelta: false, arcKey: false };
   private log: string[] = [];
+
+  // performance-feedback inputs (the live visual state the LEDs mirror)
+  private params: VisualParamVector = { ...DEFAULT_PARAMS };
+  private sceneIndex = 0;
+  private sceneCount = 0;
 
   private cell = 32;
   private gridOx = PAD;
@@ -100,13 +128,32 @@ export class MonomeTwin {
   private raf = 0;
   private pressed: { x: number; y: number } | null = null;
 
-  constructor(root: HTMLElement, bus: AppBus, setup: MonomeSetup = DEFAULT_SETUP) {
+  constructor(
+    root: HTMLElement,
+    bus: AppBus,
+    setup: MonomeSetup = DEFAULT_SETUP,
+    onLedFrame?: (frame: LedFramePayload) => void,
+  ) {
     this.root = root;
     this.bus = bus;
     this.setup = setup;
+    this.onLedFrame = onLedFrame;
     this.buildShell();
     this.subscribe();
     this.rebuild();
+    // The twin is the single LED authority: it pushes the current frame —
+    // performance feedback, a diagnostic sweep, or a mirrored template ledOut —
+    // to real hardware at a steady rate, independent of the dashboard being
+    // visible. So "what the twin shows" always equals "what the hardware shows".
+    // Lives for the session (the dashboard is never torn down).
+    if (onLedFrame) setInterval(() => this.emitLeds(), LED_EMIT_MS);
+  }
+
+  /** Feed the live visual state the performance feedback mirrors (called per frame). */
+  setFeedback(params: VisualParamVector, sceneIndex: number, sceneCount: number): void {
+    this.params = params;
+    this.sceneIndex = sceneIndex;
+    this.sceneCount = sceneCount;
   }
 
   // ── DOM ──────────────────────────────────────────────────────────
@@ -175,6 +222,8 @@ export class MonomeTwin {
     this.testMode = mode;
     this.testStart = performance.now();
     for (const [id, b] of Object.entries(this.testBtns)) b?.classList.toggle('active', id === mode);
+    // The steady emit picks up the new mode on its next tick; 'Mirror' (null)
+    // returns to performance feedback or a mirrored template frame.
   }
 
   /** Externally drive the setup (real device.attached from the bridge). */
@@ -283,21 +332,127 @@ export class MonomeTwin {
     this.logEl.textContent = this.log.join('\n');
   }
 
-  /** Mirror the host LED frame (used when no test pattern is running). */
+  /**
+   * Mirror a template's host LED frame. If it carries content we show it (a
+   * template is driving the LEDs); if it's empty we fall back to performance
+   * feedback so an idle instrument still reflects its param state.
+   */
   reflect(frame: LedFrame): void {
+    let any = false;
     const rows = this.mirrorGrid.length;
     for (let y = 0; y < rows && y < frame.grid.length; y++) {
       const src = frame.grid[y];
       const dst = this.mirrorGrid[y];
       if (!src || !dst) continue;
-      for (let x = 0; x < dst.length && x < src.length; x++) dst[x] = src[x] ?? 0;
+      for (let x = 0; x < dst.length && x < src.length; x++) {
+        const v = src[x] ?? 0;
+        dst[x] = v;
+        if (v > 0) any = true;
+      }
     }
     for (let e = 0; e < this.mirrorArc.length && e < frame.arc.length; e++) {
       const src = frame.arc[e];
       const dst = this.mirrorArc[e];
       if (!src || !dst) continue;
-      for (let i = 0; i < dst.length && i < src.length; i++) dst[i] = src[i] ?? 0;
+      for (let i = 0; i < dst.length && i < src.length; i++) {
+        const v = src[i] ?? 0;
+        dst[i] = v;
+        if (v > 0) any = true;
+      }
     }
+    this.hostFrameActive = any;
+  }
+
+  // ── unified level source (canvas + hardware read the SAME values) ──
+  private elapsedMs(): number {
+    return performance.now() - this.testStart;
+  }
+  private perfState(): PerfState {
+    return {
+      params: this.params,
+      sceneIndex: this.sceneIndex,
+      sceneCount: this.sceneCount,
+      held: this.held,
+      arcHeld: this.arcHeld,
+    };
+  }
+
+  /** Level of grid cell (x,y) right now, whatever mode is active. */
+  private gridLevelAt(x: number, y: number): number {
+    const rows = this.setup.grid?.rows ?? 0;
+    const cols = this.setup.grid?.cols ?? 0;
+    const m = this.testMode;
+    if (m === null) {
+      if (this.hostFrameActive) return this.mirrorGrid[y]?.[x] ?? 0;
+      return perfGridLevel(x, y, rows, this.perfState());
+    }
+    if (m === 'auto') return sweepGridLevel('normal', this.elapsedMs(), x, y, rows, cols);
+    if (m === 'fast') return sweepGridLevel('fast', this.elapsedMs(), x, y, rows, cols);
+    return this.testGridLevel(m, x, y, this.elapsedMs() / 1000, rows, cols);
+  }
+
+  /** Level of arc ring e, LED i right now, whatever mode is active. */
+  private arcLevelAt(e: number, i: number): number {
+    const rows = this.setup.grid?.rows ?? 0;
+    const cols = this.setup.grid?.cols ?? 0;
+    const enc = this.setup.arc?.encoders ?? 0;
+    const m = this.testMode;
+    if (m === null) {
+      if (this.hostFrameActive) return this.mirrorArc[e]?.[i] ?? 0;
+      return perfArcLevel(e, i, enc, this.perfState());
+    }
+    if (m === 'auto') return sweepArcLevel('normal', this.elapsedMs(), e, i, rows, cols, enc);
+    if (m === 'fast') return sweepArcLevel('fast', this.elapsedMs(), e, i, rows, cols, enc);
+    return this.testArcLevel(m, i, this.arcPos[e] ?? 0, this.elapsedMs() / 1000);
+  }
+
+  /** Global grid intensity right now (the dimmer sweep drives it; else full). */
+  private gridIntensityNow(): number {
+    const rows = this.setup.grid?.rows ?? 0;
+    const cols = this.setup.grid?.cols ?? 0;
+    if (this.testMode === 'intensity') return breathIntensity(this.elapsedMs());
+    if (this.testMode === 'auto') return sweepGridIntensity('normal', this.elapsedMs(), rows, cols);
+    if (this.testMode === 'fast') return sweepGridIntensity('fast', this.elapsedMs(), rows, cols);
+    return PERF_GRID_INTENSITY;
+  }
+
+  /**
+   * Snapshot the exact levels the twin is showing — performance feedback, a
+   * diagnostic sweep, or a mirrored template frame — sized to the active
+   * device. This same frame flushes to hardware, so the twin and the LEDs agree.
+   */
+  private computeFrame(): LedFramePayload {
+    const grid = this.setup.grid;
+    const arc = this.setup.arc;
+    const rows = grid?.rows ?? 0;
+    const cols = grid?.cols ?? 0;
+    const enc = arc?.encoders ?? 0;
+    const payload: LedFramePayload = {};
+    if (rows > 0 && cols > 0) {
+      const g: number[][] = [];
+      for (let y = 0; y < rows; y++) {
+        const row: number[] = [];
+        for (let x = 0; x < cols; x++) row.push(this.gridLevelAt(x, y));
+        g.push(row);
+      }
+      payload.grid = g;
+      payload.gridIntensity = this.gridIntensityNow();
+    }
+    if (enc > 0) {
+      const a: number[][] = [];
+      for (let e = 0; e < enc; e++) {
+        const ring: number[] = [];
+        for (let i = 0; i < ARC_RING_LEDS; i++) ring.push(this.arcLevelAt(e, i));
+        a.push(ring);
+      }
+      payload.arc = a;
+    }
+    return payload;
+  }
+
+  /** Steady-rate hardware push — the twin is the single LED authority. */
+  private emitLeds(): void {
+    this.onLedFrame?.(this.computeFrame());
   }
 
   // ── input ────────────────────────────────────────────────────────
@@ -440,18 +595,34 @@ export class MonomeTwin {
     const rows = grid?.rows ?? 0;
     const cols = grid?.cols ?? 0;
     const enc = arc?.encoders ?? 0;
-    const t = (performance.now() - this.testStart) / 1000;
+
+    // reflect the current LED mode (performance / sweep stage / quick test) live
+    const mode =
+      this.testMode === null
+        ? this.hostFrameActive
+          ? 'template LEDs'
+          : 'performance'
+        : this.testMode === 'auto'
+          ? `sweep — ${sweepStageLabel('normal', this.elapsedMs(), rows, cols)}`
+          : this.testMode === 'fast'
+            ? `sweep ∥ ${sweepStageLabel('fast', this.elapsedMs(), rows, cols)}`
+            : `test — ${this.testMode}`;
+    this.label.textContent = `Digital twin — ${describeSetup(this.setup)} · ${mode}`;
 
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvasW(), this.canvasH());
 
-    // grid
+    // The grid's global dimmer scales every cell's displayed brightness — so the
+    // canvas breathes in lock-step with the monobright hardware (canvas == LEDs).
+    const gi = this.gridIntensityNow() / LED_LEVEL_MAX;
+
+    // grid — same level source as the hardware frame (gridLevelAt)
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
-        const level = this.gridLevel(x, y, t, rows, cols);
+        const level = this.gridLevelAt(x, y);
         const px = this.gridOx + x * (this.cell + GAP);
         const py = this.gridOy + y * (this.cell + GAP);
-        ctx.fillStyle = ledColor(level);
+        ctx.fillStyle = ledColor(level * gi);
         roundRect(ctx, px, py, this.cell, this.cell, 5);
         ctx.fill();
         if (this.held[y]?.[x]) {
@@ -469,19 +640,18 @@ export class MonomeTwin {
       }
     }
 
-    // arc rings
+    // arc rings — same level source as the hardware frame (arcLevelAt)
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let e = 0; e < enc; e++) {
       const cxp = this.ringCx(e);
-      const pos = this.arcPos[e] ?? 0;
       for (let i = 0; i < ARC_RING_LEDS; i++) {
-        const level = this.arcLevel(e, i, pos, t);
+        const level = this.arcLevelAt(e, i);
         const a = (i / ARC_RING_LEDS) * Math.PI * 2 - Math.PI / 2;
         const inner = RING_R - 8;
         const outer = RING_R + 8;
         ctx.strokeStyle = ledColor(level);
-        ctx.lineWidth = i === pos ? 4 : 2;
+        ctx.lineWidth = level >= 15 ? 4 : 2; // emphasize the bright head
         ctx.beginPath();
         ctx.moveTo(cxp + Math.cos(a) * inner, this.arcCy + Math.sin(a) * inner);
         ctx.lineTo(cxp + Math.cos(a) * outer, this.arcCy + Math.sin(a) * outer);
@@ -493,9 +663,8 @@ export class MonomeTwin {
     }
   }
 
-  private gridLevel(x: number, y: number, t: number, rows: number, cols: number): number {
-    const m = this.testMode;
-    if (m === null) return this.mirrorGrid[y]?.[x] ?? 0;
+  /** Individual quick-test patterns (the small test buttons; sweeps + mirror handled in *At). */
+  private testGridLevel(m: TestMode, x: number, y: number, t: number, rows: number, cols: number): number {
     switch (m) {
       case 'all':
         return 15;
@@ -503,14 +672,14 @@ export class MonomeTwin {
         return (x + y) % 2 === 0 ? 15 : 0;
       case 'ramp':
         return Math.round((cols > 1 ? x / (cols - 1) : 1) * 15);
-      case 'row':
-      case 'auto': {
-        const active = Math.floor(t * 4) % rows;
+      case 'intensity':
+        return 15; // all cells on; the global dimmer (gridIntensityNow) breathes
+      case 'row': {
+        const active = Math.floor(t * 4) % Math.max(1, rows);
         return y === active ? 15 : 2;
       }
-      case 'col':
-      case 'fast': {
-        const active = Math.floor(t * 8) % cols;
+      case 'col': {
+        const active = Math.floor(t * 8) % Math.max(1, cols);
         return x === active ? 15 : 1;
       }
       default:
@@ -518,9 +687,7 @@ export class MonomeTwin {
     }
   }
 
-  private arcLevel(e: number, i: number, pos: number, t: number): number {
-    const m = this.testMode;
-    if (m === null) return this.mirrorArc[e]?.[i] ?? 0;
+  private testArcLevel(m: TestMode, i: number, pos: number, t: number): number {
     switch (m) {
       case 'arcGrad':
         return Math.round((i / (ARC_RING_LEDS - 1)) * 15);
@@ -529,9 +696,7 @@ export class MonomeTwin {
         if (i === head) return 15;
         return i <= head ? 9 : 0;
       }
-      case 'arcTicks':
-      case 'auto':
-      case 'fast': {
+      case 'arcTicks': {
         const head = Math.floor(t * 40) % ARC_RING_LEDS;
         if (i === head) return 15;
         return i % 8 === 0 ? 6 : 0;

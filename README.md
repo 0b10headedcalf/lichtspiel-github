@@ -40,10 +40,10 @@ internet — agentic tooling is for *build time* only.
 
 | Path | What it is | Phase |
 |---|---|---|
-| `apps/p5-runtime/` | Browser p5 visual engine (Vite + TS, instance mode). The heart of the demo. | 1 ✅ |
-| `apps/live-bridge/` | Node WebSocket/OSC bridge + CLI fake-state sender. | 2 ✅ |
+| `apps/p5-runtime/` | Browser p5 visual engine (Vite + TS, instance mode) + monome digital twin / LED feedback. The heart of the demo. | 1 ✅ · 4 ✅ |
+| `apps/live-bridge/` | Node WebSocket/OSC bridge + serialosc monome layer + CLI fake-state sender. | 2 ✅ · 4 ✅ |
 | `apps/ml-service/` | Python retrieval sidecar (metadata → MIR → embeddings). | 5–7 |
-| `max/` | Max for Live device + patches + JS Live API helpers. | 3 |
+| `max/` | Max for Live device + patches + JS Live API helpers. | 3 ✅ |
 | `packages/schemas/` | Shared contracts: `LiveSessionState`, `VisualParamVector`, etc. | 0 ✅ |
 | `packages/visual-corpus/` | Template manifests/descriptors + Processing→p5 conversion notes. | 1/5 |
 | `demo/` | Ableton demo set, clips, capture scripts, hackathon script. | — |
@@ -64,11 +64,12 @@ Then drive it from the keyboard (no hardware required):
 - `1`–`5` — select visual template
 - `←/→` — semantic distance · `↑/↓` — mutation amount
 - `space` — lock/unlock · `r` — randomize safe params · `d` — toggle debug panel
-- `g` — toggle the on-screen monome emulator (with a Grid 64/128 + Arc 2/4 switcher)
+- `g` — toggle the monome **digital twin** (LED feedback + capability sweeps, with a Grid 64/128 + Arc 2/4 switcher)
 
 The app **detects which monome is connected and adapts** — grid columns are
-param faders (the `Lichtspiel_v3` idiom), and the surface scales to Grid 64/128
-+ Arc 2/4. See [`docs/monome.md`](docs/monome.md).
+param faders (the `Lichtspiel_v3` idiom), the arc rings show the mapped params,
+and the grid/arc LEDs **mirror the performance**; the surface scales to Grid
+64/128 + Arc 2/4. See [`docs/monome.md`](docs/monome.md).
 
 Run the full local stack:
 
@@ -94,7 +95,11 @@ and in per-file headers.
 
 ## Status
 
-Bootstrapped 2026-05-30. Phases 0–2 in progress; see [`ROADMAP.md`](ROADMAP.md).
+**Phases 0–4 done.** p5 runtime + Node bridge + the Max for Live probe/control
+device, and the **monome layer (serialosc discovery, grid/arc input, and
+performance LED feedback + diagnostic sweeps) — verified on the real Grid 64 +
+Arc 2.** Next: Phase 5 (metadata retrieval wired through the bridge). See
+[`ROADMAP.md`](ROADMAP.md).
 
 Private repo: `https://codeberg.org/Grashopr88/lichtspiel`.
 

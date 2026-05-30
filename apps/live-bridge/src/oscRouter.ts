@@ -10,8 +10,8 @@
  * dropped, never forwarded to p5).
  *
  * Outbound (bridge → Max) on `bridgeToMaxPort` is available via send() for
- * future status/LED return (Phase 4). serialosc (monome) shares this transport
- * in Phase 4 but is not wired here yet.
+ * future status/LED return. serialosc (monome) is a separate transport with its
+ * own socket — see `serialosc.ts`.
  */
 
 import { createSocket, type Socket } from 'node:dgram';
@@ -30,8 +30,6 @@ export interface OscRouterOptions {
   maxToBridgePort: number;
   /** OSC port the bridge sends to Max. */
   bridgeToMaxPort: number;
-  /** serialosc discovery port (monome fallback, Phase 4). */
-  serialoscPort: number;
   /** Address prefix the M4L device uses (set via /sys/prefix). */
   prefix?: string;
   /** Push a decoded wire message into the hub. */
@@ -57,7 +55,7 @@ export class OscRouter {
     });
     sock.on('listening', () =>
       logger.info(
-        `OSC listening udp ${this.opts.host}:${this.opts.maxToBridgePort} (prefix ${this.prefix}) · serialosc:${this.opts.serialoscPort} (Phase 4)`,
+        `OSC (Max) listening udp ${this.opts.host}:${this.opts.maxToBridgePort} (prefix ${this.prefix})`,
       ),
     );
     try {
