@@ -57,7 +57,7 @@ Message bus between Max and p5.
 **Acceptance:** CLI changes the p5 scene ✓ · CLI sends a fake `LiveSessionState` ✓ ·
 p5 responds ✓ · reconnect works ✓ (bridge self-test green).
 
-## Phase 3 — Max for Live Live API probe 🟡 (read-path verified; control-out + UI remain)
+## Phase 3 — Max for Live Live API probe ✅ functionally complete (3b UI polish optional)
 
 Read real Live state and feed it to p5 over OSC; let device controls move p5
 params. See `max/docs/max_patch_notes.md`.
@@ -72,13 +72,13 @@ params. See `max/docs/max_patch_notes.md`.
 - ✅ Assembled into a M4L device (Max Audio Effect) + **read-path verified in the
   ADE_Sleuth set**: real tempo (123bpm), selected track name, transport (▶)
   stream to the p5 HUD (`rx` climbing). 2026-05-30.
-- 🟡 **(3a) Device controls → p5 params** — `patches/lichtspiel_controls.maxpat`
-  generated (6 `live.dial`s → `/lichtspiel/param`, 5 scene buttons → `/scene`);
-  bridge path **verified live** (`params.update src=osc`). Remaining: paste into
-  the device + set dial range 0.–1. (GUI). Satisfies the "manual controls move
-  p5 params" acceptance once assembled.
-- 🟡 **(3b) Compact device UI** — the `live.dial`s are a minimal functional UI;
-  layout/labels/status panel (spec §15) later.
+- ✅ **(3a) Device controls → p5 params** — `LichtspielHub` device has 6
+  `live.dial`s (Float, range 0.–1.) → `/lichtspiel/param` + 5 scene buttons →
+  `/scene`. **Verified by the user**: turning a dial moves the matching p5 param
+  in the HUD. Acceptance "manual controls move p5 params" met. 2026-05-30.
+- ⬜ **(3b) Compact device UI** (cosmetic) — the dials are a functional UI;
+  Presentation-view layout + labels + status panel (spec §15) is fiddly by hand,
+  so it's the ideal first job for the maxmsp-mcp (user has Max 9). Deferred.
 - ✅ **(3c) Playing-clip read** — `live_api_helpers.js` reads the selected
   track's session `playing_slot_index` clip, then the arrangement clip spanning
   the playhead (guarded; arrangement property names best-effort → verify in-set).
