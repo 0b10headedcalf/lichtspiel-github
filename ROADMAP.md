@@ -57,9 +57,10 @@ Message bus between Max and p5.
 **Acceptance:** CLI changes the p5 scene ✓ · CLI sends a fake `LiveSessionState` ✓ ·
 p5 responds ✓ · reconnect works ✓ (bridge self-test green).
 
-## Phase 3 — Max for Live Live API probe ✅ (verified in a real Live set)
+## Phase 3 — Max for Live Live API probe 🟡 (read-path verified; control-out + UI remain)
 
-Read real Live state and feed it to p5 over OSC. See `max/docs/max_patch_notes.md`.
+Read real Live state and feed it to p5 over OSC; let device controls move p5
+params. See `max/docs/max_patch_notes.md`.
 
 - ✅ Bridge **OSC receiver** (`oscRouter.ts`, pure-Node dgram + OSC codec):
   `/lichtspiel/state|scene|param` on UDP 7400 → hub → p5. Verified end-to-end
@@ -68,16 +69,21 @@ Read real Live state and feed it to p5 over OSC. See `max/docs/max_patch_notes.m
   `LiveAPI`, emits a `LiveSessionState` JSON symbol (guarded; degrades to default).
 - ✅ Generated probe patch `patches/lichtspiel_probe.maxpat` (`build_patches.py`
   via MaxPyLang): loadbang/metro/`live.thisdevice` → js → prepend → udpsend.
-- ✅ Assembled into a M4L device (Max Audio Effect) + **verified in the
+- ✅ Assembled into a M4L device (Max Audio Effect) + **read-path verified in the
   ADE_Sleuth set**: real tempo (123bpm), selected track name, transport (▶)
   stream to the p5 HUD (`rx` climbing). 2026-05-30.
-- ⬜ Expose Live params (`live.dial`) → `/lichtspiel/param`; compact device UI.
-- ⬜ Read arrangement playing-clip-per-track (probe currently does selected
-  track + transport + session highlighted clip).
+- ⬜ **(3a) Device controls → p5 params** (`live.dial`/`live.text` → `/lichtspiel/param`
+  + scene/lock/surprise buttons → `/scene`). Satisfies the "manual controls move
+  p5 params" acceptance. I generate the routing patch; placement is GUI.
+- ⬜ **(3b) Compact device UI** (Status / Source / Visual / Macros — spec §15).
+- ⬜ **(3c) Arrangement playing-clip-per-track** in `live_api_helpers.js` (probe
+  currently = selected track + transport + session highlighted clip).
+- ⬜ (3d, light) clip color + device/macro names (spec §7.2). MIDI content
+  summary is Phase 6.
 
 **Acceptance:** changing the selected clip / toggling transport updates the
-bridge log · device loads without missing deps · M4L manual controls move p5
-params · device works when ML service is offline.
+bridge log ✅ · device loads without missing deps ✅ · M4L manual controls move
+p5 params ⬜ (3a) · device works when ML service is offline ✅.
 
 ## Phase 4 — Monome integration & device adaptation 🟡
 
