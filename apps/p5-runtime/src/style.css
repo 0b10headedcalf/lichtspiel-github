@@ -1,0 +1,170 @@
+:root {
+  color-scheme: dark;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+#stage canvas {
+  display: block;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ── Diagnostics HUD ─────────────────────────────────────────────── */
+.hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  width: 260px;
+  padding: 10px 12px;
+  background: rgba(8, 10, 14, 0.66);
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  border-radius: 8px;
+  color: #cfe8ff;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  z-index: 10;
+}
+
+#hud-title {
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7fd0ff;
+  margin-bottom: 6px;
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.hud-fps {
+  color: #8effc0;
+}
+.hud-meta {
+  color: #9fb3c8;
+  margin-bottom: 6px;
+}
+
+.hud-param {
+  display: grid;
+  grid-template-columns: 92px 1fr 34px;
+  gap: 6px;
+  align-items: center;
+}
+.hud-k {
+  color: #9fb3c8;
+}
+.hud-v {
+  text-align: right;
+  color: #cfe8ff;
+}
+.hud-bar {
+  height: 5px;
+  background: rgba(120, 200, 255, 0.14);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.hud-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2f80ed, #7fd0ff);
+}
+
+#hud-help {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(120, 200, 255, 0.14);
+  white-space: pre-line;
+  color: #7e93a8;
+  font-size: 10px;
+}
+
+/* ── Connection pill ─────────────────────────────────────────────── */
+.conn {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  padding: 4px 10px;
+  font-size: 10px;
+  border-radius: 999px;
+  background: rgba(8, 10, 14, 0.66);
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  color: #9fb3c8;
+  z-index: 10;
+}
+.conn.live {
+  color: #8effc0;
+  border-color: rgba(142, 255, 192, 0.4);
+}
+
+/* ── Monome emulator ─────────────────────────────────────────────── */
+.monome {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  padding: 12px;
+  background: rgba(8, 10, 14, 0.72);
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  border-radius: 10px;
+  z-index: 10;
+  backdrop-filter: blur(6px);
+}
+.emu-label {
+  font-size: 10px;
+  color: #7e93a8;
+  margin-bottom: 8px;
+}
+.emu-grid {
+  display: grid;
+  gap: 3px;
+  width: 232px;
+}
+.emu-cell {
+  aspect-ratio: 1;
+  --lvl: 0;
+  border: 1px solid rgba(120, 200, 255, 0.22);
+  border-radius: 3px;
+  background: rgba(120, 200, 255, calc(0.06 + var(--lvl) * 0.9));
+  cursor: pointer;
+  padding: 0;
+}
+.emu-cell:active {
+  background: rgba(127, 208, 255, 0.85);
+}
+.emu-arcs {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  justify-content: center;
+}
+.emu-ring {
+  cursor: grab;
+}
+.emu-ring:active {
+  cursor: grabbing;
+}

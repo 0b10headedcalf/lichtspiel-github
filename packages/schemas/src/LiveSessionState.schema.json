@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lichtspiel.local/schemas/LiveSessionState.schema.json",
+  "title": "LiveSessionState",
+  "description": "Normalized snapshot emitted by the Max for Live layer about the Live Set.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "version", "timestampMs", "transport", "selection", "clip", "devices", "performance"],
+  "properties": {
+    "type": { "const": "live_session_state" },
+    "version": { "type": "string" },
+    "timestampMs": { "type": "number" },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["isPlaying", "tempo", "beat", "bar"],
+      "properties": {
+        "isPlaying": { "type": "boolean" },
+        "tempo": { "type": "number", "minimum": 0 },
+        "beat": { "type": "number" },
+        "bar": { "type": "number" }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trackIndex", "trackName", "sceneIndex", "sceneName", "clipSlotIndex", "clipName", "clipColor", "clipType"],
+      "properties": {
+        "trackIndex": { "type": "integer" },
+        "trackName": { "type": "string" },
+        "sceneIndex": { "type": "integer" },
+        "sceneName": { "type": "string" },
+        "clipSlotIndex": { "type": "integer" },
+        "clipName": { "type": "string" },
+        "clipColor": { "type": "string" },
+        "clipType": { "enum": ["audio", "midi", "unknown"] }
+      }
+    },
+    "clip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lengthBeats", "loopStart", "loopEnd", "isLooping", "audioFilePath", "midiSummary"],
+      "properties": {
+        "lengthBeats": { "type": "number" },
+        "loopStart": { "type": "number" },
+        "loopEnd": { "type": "number" },
+        "isLooping": { "type": "boolean" },
+        "audioFilePath": { "type": ["string", "null"] },
+        "midiSummary": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["noteCount", "pitchMin", "pitchMax", "avgRegister", "noteDensity", "polyphony", "pitchClasses"],
+              "properties": {
+                "noteCount": { "type": "number" },
+                "pitchMin": { "type": "number" },
+                "pitchMax": { "type": "number" },
+                "avgRegister": { "type": "number" },
+                "noteDensity": { "type": "number" },
+                "polyphony": { "type": "number" },
+                "pitchClasses": { "type": "array", "items": { "type": "number" } }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["trackIndex", "deviceIndex", "name", "parameters"],
+        "properties": {
+          "trackIndex": { "type": "integer" },
+          "deviceIndex": { "type": "integer" },
+          "name": { "type": "string" },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "value", "min", "max"],
+              "properties": {
+                "name": { "type": "string" },
+                "value": { "type": "number" },
+                "min": { "type": "number" },
+                "max": { "type": "number" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sceneLocked", "manualOverride", "semanticDistance", "mutationAmount"],
+      "properties": {
+        "sceneLocked": { "type": "boolean" },
+        "manualOverride": { "type": "boolean" },
+        "semanticDistance": { "type": "number" },
+        "mutationAmount": { "type": "number" }
+      }
+    }
+  }
+}

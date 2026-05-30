@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lichtspiel.local/schemas/MutationRequest.schema.json",
+  "title": "MutationRequest",
+  "description": "A request to mutate the current/target visual within safe ranges (Phase 8).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "version", "amount"],
+  "properties": {
+    "type": { "const": "mutation_request" },
+    "version": { "type": "string" },
+    "sceneId": { "type": "string" },
+    "amount": { "type": "number", "minimum": 0, "maximum": 1 },
+    "axes": {
+      "type": "array",
+      "items": { "enum": ["palette", "geometry", "motion", "camera", "texture", "feedback"] }
+    },
+    "seed": { "type": "integer" }
+  }
+}

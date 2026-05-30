@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+*.tsbuildinfo
+
+# python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.uv/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+
+# ml caches / model weights (never commit weights or embeddings)
+apps/ml-service/.cache/
+*.npy
+*.faiss
+*.index
+models/
+weights/
+
+# logs & captures
+*.log
+logs/
+demo/captures/*
+!demo/captures/.gitkeep
+apps/*/*.log
+
+# env
+.env
+.env.local
+*.local
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+Thumbs.db
+
+# Ableton autosaves / backups (keep the demo .als itself)
+demo/ableton/Backup/
+*.als.bak
+
+# context docs are local research material, not part of the codebase
+context_docs/

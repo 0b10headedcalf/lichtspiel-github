@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lichtspiel.local/schemas/MonomeEvent.schema.json",
+  "title": "MonomeEvent",
+  "description": "An input event from a monome grid or arc.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "deviceId", "x", "y", "state"],
+      "properties": {
+        "type": { "const": "grid.key" },
+        "deviceId": { "type": "string" },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "state": { "enum": [0, 1] }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "deviceId", "encoder", "delta"],
+      "properties": {
+        "type": { "const": "arc.delta" },
+        "deviceId": { "type": "string" },
+        "encoder": { "type": "integer", "minimum": 0 },
+        "delta": { "type": "number" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "deviceId", "encoder", "state"],
+      "properties": {
+        "type": { "const": "arc.key" },
+        "deviceId": { "type": "string" },
+        "encoder": { "type": "integer", "minimum": 0 },
+        "state": { "enum": [0, 1] }
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@lichtspiel/live-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lichtspiel Node bridge — WebSocket server + JSON validation + logging + OSC routing between Max/Live, monome, and the p5 runtime.",
+  "bin": {
+    "lichtspiel-send": "./src/cli.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "cli": "tsx src/cli.ts",
+    "test": "tsx src/selftest.ts"
+  },
+  "dependencies": {
+    "@lichtspiel/schemas": "workspace:*",
+    "ajv": "^8.17.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

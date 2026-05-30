@@ -1,0 +1,56 @@
+{
+  "$comment": "Serializable catalog of visual templates. Mirrors TemplateRegistry.catalog() in apps/p5-runtime. The bridge + ml-service read this to reason about scenes without importing p5. Keep in sync with src/templates/*.",
+  "version": "0.1.0",
+  "templates": [
+    {
+      "id": "minimalPulse",
+      "name": "Minimal Pulse",
+      "family": "pulse",
+      "description": "Concentric rings breathing from the center. Low-CPU demo fallback.",
+      "tags": ["minimal", "calm", "fallback", "ambient", "sparse"],
+      "defaultParams": { "density": 0.45, "motion": 0.4, "contrast": 0.5, "lineWeight": 0.45, "palette": 0.55 },
+      "renderer": "p2d",
+      "sourceLineage": "original"
+    },
+    {
+      "id": "topographicTunnel",
+      "name": "Topographic Tunnel",
+      "family": "tunnel",
+      "description": "Infinite forward tunnel of noise-displaced contour rings. Rhythmic, deep.",
+      "tags": ["tunnel", "depth", "forward", "rhythmic", "percussive", "topographic", "fast"],
+      "defaultParams": { "density": 0.6, "motion": 0.6, "turbulence": 0.4, "cameraDepth": 0.6, "palette": 0.62, "contrast": 0.55, "lineWeight": 0.4 },
+      "renderer": "p2d",
+      "sourceLineage": "UPF_AV_Testv14.pde"
+    },
+    {
+      "id": "gridWorld",
+      "name": "Grid World",
+      "family": "grid",
+      "description": "A field of cells rippling with activation waves + neighbor connections.",
+      "tags": ["grid", "structure", "spatial", "sequenced", "rhythmic", "pattern"],
+      "defaultParams": { "density": 0.5, "motion": 0.5, "symmetry": 0.5, "turbulence": 0.3, "cameraDepth": 0.5, "palette": 0.3, "contrast": 0.6, "lineWeight": 0.4 },
+      "renderer": "p2d",
+      "sourceLineage": "PatternGridWorld_v11.pde"
+    },
+    {
+      "id": "parquetGlitch",
+      "name": "Parquet Glitch",
+      "family": "parquet",
+      "description": "Parquet deformation of rotating tiles, fractured by glitch slices.",
+      "tags": ["glitch", "dense", "fragmented", "geometric", "tiles", "broken", "digital"],
+      "defaultParams": { "density": 0.55, "motion": 0.45, "turbulence": 0.4, "strobe": 0.15, "symmetry": 0.5, "palette": 0.08, "contrast": 0.7, "lineWeight": 0.45 },
+      "renderer": "p2d",
+      "sourceLineage": "Parquet_v3_glitch.pde"
+    },
+    {
+      "id": "torusField",
+      "name": "Torus Field",
+      "family": "objects3d",
+      "description": "Rotating wireframe tori + spheres in 3D. Sustained, harmonic, evolving.",
+      "tags": ["3d", "torus", "harmonic", "sustained", "slow", "evolving", "pad", "wireframe"],
+      "defaultParams": { "density": 0.45, "motion": 0.4, "turbulence": 0.25, "cameraDepth": 0.5, "rotationX": 0.55, "rotationY": 0.5, "rotationZ": 0.5, "palette": 0.7, "contrast": 0.6, "lineWeight": 0.35 },
+      "renderer": "webgl",
+      "sourceLineage": "monomearc4shapescontrolv12.pde"
+    }
+  ]
+}

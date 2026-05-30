@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lichtspiel — p5 runtime</title>
+  </head>
+  <body>
+    <!-- p5 mounts its canvas here (instance mode). -->
+    <div id="stage"></div>
+
+    <!-- Diagnostics / HUD overlay (toggle with `d`). -->
+    <div id="hud" class="hud">
+      <div id="hud-title">Lichtspiel</div>
+      <div id="hud-body"></div>
+      <div id="hud-help"></div>
+    </div>
+
+    <!-- On-screen monome emulator (toggle with `g`). -->
+    <div id="monome-emulator" class="monome hidden"></div>
+
+    <!-- Connection pill -->
+    <div id="conn" class="conn">browser-only</div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

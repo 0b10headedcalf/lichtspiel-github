@@ -1,0 +1,24 @@
+{
+  "name": "@lichtspiel/p5-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lichtspiel browser p5 visual runtime — template registry, param interpolation, monome/keyboard control, bridge client.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "smoke": "node ./scripts/smoke.mjs",
+    "test": "node ./scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@lichtspiel/schemas": "workspace:*",
+    "p5": "^1.11.3"
+  },
+  "devDependencies": {
+    "@types/p5": "^1.7.6",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

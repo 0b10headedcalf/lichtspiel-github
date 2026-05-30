@@ -1,0 +1,36 @@
+{
+  "$comment": "Phase 5 metadata-retrieval descriptors. keywords are matched against clip/track/scene names; affinities (0..1) are scored against musical descriptors derived from Live state (Phase 6 adds MIDI/audio features). params suggest the param vector when this descriptor wins. Consumed by ml-service/retrieve.py.",
+  "version": "0.1.0",
+  "descriptors": [
+    {
+      "sceneId": "minimalPulse",
+      "keywords": ["ambient", "pad", "drone", "calm", "intro", "sparse", "minimal", "slow", "quiet"],
+      "affinities": { "percussive": 0.1, "harmonic": 0.6, "dense": 0.1, "bright": 0.4, "fast": 0.1, "sustained": 0.8 },
+      "params": { "density": 0.4, "motion": 0.35, "palette": 0.55 }
+    },
+    {
+      "sceneId": "topographicTunnel",
+      "keywords": ["drums", "beat", "perc", "kick", "drive", "techno", "fast", "loop", "rhythm"],
+      "affinities": { "percussive": 0.9, "harmonic": 0.3, "dense": 0.6, "bright": 0.5, "fast": 0.9, "sustained": 0.2 },
+      "params": { "density": 0.7, "motion": 0.75, "turbulence": 0.45, "cameraDepth": 0.7 }
+    },
+    {
+      "sceneId": "gridWorld",
+      "keywords": ["seq", "arp", "pattern", "grid", "melody", "pluck", "structured", "stab"],
+      "affinities": { "percussive": 0.5, "harmonic": 0.6, "dense": 0.5, "bright": 0.6, "fast": 0.5, "sustained": 0.4 },
+      "params": { "density": 0.55, "motion": 0.5, "symmetry": 0.5 }
+    },
+    {
+      "sceneId": "parquetGlitch",
+      "keywords": ["glitch", "idm", "broken", "noise", "fx", "dense", "chaos", "distort", "fill"],
+      "affinities": { "percussive": 0.7, "harmonic": 0.2, "dense": 0.9, "bright": 0.7, "fast": 0.7, "sustained": 0.2 },
+      "params": { "density": 0.7, "turbulence": 0.6, "strobe": 0.25 }
+    },
+    {
+      "sceneId": "torusField",
+      "keywords": ["chord", "pad", "harmony", "sustain", "drone", "string", "warm", "evolve", "lush"],
+      "affinities": { "percussive": 0.2, "harmonic": 0.9, "dense": 0.4, "bright": 0.5, "fast": 0.2, "sustained": 0.9 },
+      "params": { "density": 0.45, "motion": 0.35, "palette": 0.7 }
+    }
+  ]
+}

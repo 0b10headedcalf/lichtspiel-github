@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "p5-runtime",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:p5"],
+      "port": 5273
+    },
+    {
+      "name": "live-bridge",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:bridge"],
+      "port": 7891
+    }
+  ]
+}

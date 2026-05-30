@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lichtspiel.local/schemas/VisualTemplate.schema.json",
+  "title": "VisualTemplateMeta",
+  "description": "Serializable metadata for a p5 visual template (the catalog/manifest entry).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "family", "description", "tags", "defaultParams"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string" },
+    "family": { "type": "string" },
+    "description": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "defaultParams": {
+      "type": "object",
+      "description": "Partial VisualParamVector applied on top of DEFAULT_PARAMS.",
+      "additionalProperties": { "type": ["number", "string"] }
+    },
+    "safeParamRanges": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "number" },
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "renderer": { "enum": ["p2d", "webgl"] },
+    "sourceLineage": { "type": "string" }
+  }
+}

@@ -1,0 +1,77 @@
+# Setup
+
+## Prerequisites
+
+- **Node 22** (`nvm use` reads `.nvmrc`) + **pnpm 11**.
+- **Python 3.10–3.12** for the ML sidecar (later phases). `uv` optional; a plain
+  venv works too.
+- A **Chromium** browser for the p5 runtime.
+- For the full installation: **Ableton Live Suite + Max for Live**, **serialosc**,
+  a **monome grid (m64_0175)** + **arc (m0000174)**, and the **monome Max package**.
+  None of these are needed for browser-only development.
+
+## Install
+
+```bash
+cd /Users/trent/lichtspiel
+nvm use
+pnpm install
+```
+
+> If pnpm warns about ignored `esbuild` build scripts, it's already approved in
+> `pnpm-workspace.yaml` (`allowBuilds: esbuild: true`); re-run `pnpm install`.
+
+## Run (browser-only — no Ableton)
+
+```bash
+pnpm dev:p5          # Vite dev server (default :5273); opens the p5 runtime
+```
+
+Keyboard control (mirrors the monome mappings):
+
+| key | action |
+|---|---|
+| `1`–`5` | select template · `n`/`p` next/prev |
+| `←` `→` | semantic distance · `↑` `↓` mutation amount |
+| `[` `]` | density · `-` `=` motion |
+| `space` | lock/unlock · `r` randomize safe params · `s` surprise |
+| `d` | toggle diagnostics HUD · `g` toggle on-screen monome emulator |
+
+## Run the full local stack
+
+```bash
+pnpm dev:bridge      # Node WebSocket bridge :7890 (+ HTTP status :7891/status)
+pnpm dev:p5          # connects to the bridge automatically (pill turns "bridge connected")
+
+# drive it without Ableton:
+pnpm send scene gridWorld
+pnpm send state --tempo 140 --clip "dense perc loop" --type midi --playing
+pnpm send params --density 0.9 --motion 0.7 --palette 0.1
+pnpm send retrieval parquetGlitch --reason "dense + fragmented" --density 0.9
+```
+
+Then open Ableton Live and load `max/devices/LichtspielHub.amxd` (Phase 3).
+
+## ML sidecar (later phases)
+
+```bash
+cd apps/ml-service
+python3 -m venv .venv && source .venv/bin/activate   # or: uv venv && source .venv/bin/activate
+python -m lichtspiel_ml.app        # stub HTTP service on :7892 (health + stub retrieve)
+```
+
+## Verify
+
+```bash
+pnpm -r typecheck
+pnpm validate:schemas
+pnpm smoke:p5
+pnpm --filter @lichtspiel/live-bridge test
+pnpm --filter @lichtspiel/p5-runtime build
+```
+
+## Config
+
+All defaults live in code; `.env` overrides. Copy `.env.example` → `.env` and
+set monome serials, ports, and canvas size. The bridge binds to `127.0.0.1`
+by default — change `LICHTSPIEL_BIND_HOST` only on a trusted LAN.

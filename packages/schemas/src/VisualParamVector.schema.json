@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lichtspiel.local/schemas/VisualParamVector.schema.json",
+  "title": "VisualParamVector",
+  "description": "Normalized control surface for p5 templates. Numeric params are 0..1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sceneId",
+    "density",
+    "motion",
+    "turbulence",
+    "symmetry",
+    "strobe",
+    "cameraDepth",
+    "rotationX",
+    "rotationY",
+    "rotationZ",
+    "palette",
+    "contrast",
+    "lineWeight",
+    "feedback",
+    "mutationAmount",
+    "semanticDistance"
+  ],
+  "properties": {
+    "sceneId": { "type": "string", "minLength": 1 },
+    "density": { "$ref": "#/$defs/unit" },
+    "motion": { "$ref": "#/$defs/unit" },
+    "turbulence": { "$ref": "#/$defs/unit" },
+    "symmetry": { "$ref": "#/$defs/unit" },
+    "strobe": { "$ref": "#/$defs/unit" },
+    "cameraDepth": { "$ref": "#/$defs/unit" },
+    "rotationX": { "$ref": "#/$defs/unit" },
+    "rotationY": { "$ref": "#/$defs/unit" },
+    "rotationZ": { "$ref": "#/$defs/unit" },
+    "palette": { "$ref": "#/$defs/unit" },
+    "contrast": { "$ref": "#/$defs/unit" },
+    "lineWeight": { "$ref": "#/$defs/unit" },
+    "feedback": { "$ref": "#/$defs/unit" },
+    "mutationAmount": { "$ref": "#/$defs/unit" },
+    "semanticDistance": { "$ref": "#/$defs/unit" }
+  },
+  "$defs": {
+    "unit": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "lichtspiel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lichtspiel — a standalone Ableton Live + Max for Live + p5.js audiovisual composition assistant. Reads Live session state, retrieves/morphs p5 visual scenes, played tactilely with monome grid + arc.",
+  "type": "module",
+  "packageManager": "pnpm@11.1.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --reporter append-only dev",
+    "dev:p5": "pnpm --filter @lichtspiel/p5-runtime dev",
+    "dev:bridge": "pnpm --filter @lichtspiel/live-bridge dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r --no-bail typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "validate:schemas": "pnpm --filter @lichtspiel/schemas validate",
+    "smoke:p5": "pnpm --filter @lichtspiel/p5-runtime smoke",
+    "send": "pnpm --filter @lichtspiel/live-bridge cli"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
