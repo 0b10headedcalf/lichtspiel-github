@@ -92,6 +92,10 @@ export class BridgeClient {
       if (e.type === 'grid.key') this.bus.emit('monome.grid', e);
       else if (e.type === 'arc.delta') this.bus.emit('monome.arcDelta', e);
       else if (e.type === 'arc.key') this.bus.emit('monome.arcKey', e);
+    } else if (isType(m, 'device.attached')) {
+      this.bus.emit('device.attached', m.payload);
+    } else if (isType(m, 'device.detached')) {
+      this.bus.emit('device.detached', m.payload);
     }
   }
 

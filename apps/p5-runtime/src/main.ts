@@ -8,16 +8,20 @@
 
 import './style.css';
 import {
-  type ArcDeltaEvent,
-  type GridKeyEvent,
+  type MonomeSetup,
+  type NumericParamKey,
   type VisualParamVector,
+  DEFAULT_SETUP,
   clamp01,
+  describeSetup,
+  profileFromAttached,
 } from '@lichtspiel/schemas';
 import { createBus } from './messageBus.js';
 import { SketchHost } from './sketchHost.js';
 import { TemplateRegistry } from './templateRegistry.js';
 import { TEMPLATES } from './templates/index.js';
 import { installKeyboard } from './keyboard.js';
+import { createMonomeMapping } from './monomeMapping.js';
 import { DebugPanel } from './ui/debugPanel.js';
 import { MonomeEmulator } from './ui/monomeEmulator.js';
 import { BridgeClient } from './transport/bridgeClient.js';
@@ -37,8 +41,12 @@ const bus = createBus();
 const registry = new TemplateRegistry();
 registry.registerAll(TEMPLATES);
 
+// Active monome setup — defaults to the primary target (grid 64 + arc 2),
+// updated by the emulator switcher or a real device.attached from the bridge.
+let setup: MonomeSetup = DEFAULT_SETUP;
+
 const debug = new DebugPanel(hud, hudHelp);
-const emulator = new MonomeEmulator(emulatorEl, bus);
+const emulator = new MonomeEmulator(emulatorEl, bus, setup);
 
 const host = new SketchHost({
   parent: stage,
@@ -85,32 +93,56 @@ bus.on('status', ({ connected }) => {
   connEl.classList.toggle('live', connected);
 });
 
-// Monome (real or emulated) → app-level mappings + per-sketch dispatch.
-bus.on('monome.grid', (e: GridKeyEvent) => {
-  // Grid page 1, top row: columns select scene families.
-  if (e.state === 1 && e.y === 0 && e.x < registry.size) {
-    const t = registry.at(e.x);
+// Monome (real or emulated) → the profile-aware column-fader idiom + per-sketch dispatch.
+const mapping = createMonomeMapping(() => setup, {
+  setParam: (key, value) => host.setTargetParams({ [key]: value } as Partial<VisualParamVector>),
+  nudgeParam: (key, delta) => adjustKey(key, delta),
+  selectSceneIndex: (i) => {
+    const t = registry.at(i);
     if (t) selectScene(t, true);
-  }
+  },
+  nextScene: () => {
+    const t = registry.neighbor(host.currentTemplateId(), 1);
+    if (t) selectScene(t, true);
+  },
+  surprise: () => doSurprise(),
+});
+
+bus.on('monome.grid', (e) => {
+  mapping.onGrid(e);
   host.dispatchGridKey(e);
 });
-
-bus.on('monome.arcDelta', (e: ArcDeltaEvent) => {
-  const cur = host.targetParams();
-  const step = e.delta / 64;
-  if (e.encoder === 0) host.setTargetParams({ semanticDistance: clamp01(cur.semanticDistance + step) });
-  else if (e.encoder === 1) host.setTargetParams({ mutationAmount: clamp01(cur.mutationAmount + step) });
-  else if (e.encoder === 2) host.setTargetParams({ motion: clamp01(cur.motion + step) });
-  else if (e.encoder === 3) host.setTargetParams({ palette: clamp01(cur.palette + step) });
+bus.on('monome.arcDelta', (e) => {
+  mapping.onArcDelta(e);
   host.dispatchArcDelta(e);
 });
+bus.on('monome.arcKey', (e) => {
+  mapping.onArcKey(e);
+  host.dispatchArcKey(e);
+});
 
-bus.on('monome.arcKey', (e) => host.dispatchArcKey(e));
+// Device detection → adapt. Emulator switcher emits 'monome.setup' now; the
+// bridge's serialosc 'device.attached' drives the same path in Phase 4.
+bus.on('monome.setup', (s) => {
+  setup = s;
+  console.info(`[lichtspiel] monome setup → ${describeSetup(s)}`);
+});
+bus.on('device.attached', (d) => {
+  const prof = profileFromAttached(d);
+  setup = prof.kind === 'grid' ? { ...setup, grid: prof } : { ...setup, arc: prof };
+  emulator.setSetup(setup);
+  console.info(`[lichtspiel] device attached → ${describeSetup(setup)}`);
+});
+bus.on('device.detached', (d) => {
+  if (setup.grid?.serial === d.id) setup = { ...setup, grid: null };
+  if (setup.arc?.serial === d.id) setup = { ...setup, arc: null };
+  emulator.setSetup(setup);
+});
 
 // ── Keyboard handlers ────────────────────────────────────────────────
-function adjust(key: 'semanticDistance' | 'mutationAmount' | 'motion' | 'density', delta: number): void {
+function adjustKey(key: NumericParamKey, delta: number): void {
   const cur = host.targetParams();
-  host.setTargetParams({ [key]: clamp01(cur[key] + delta) });
+  host.setTargetParams({ [key]: clamp01(cur[key] + delta) } as Partial<VisualParamVector>);
 }
 
 function doRandomize(): void {
@@ -144,7 +176,7 @@ installKeyboard({
     const t = registry.neighbor(host.currentTemplateId(), -1);
     if (t) selectScene(t, true);
   },
-  adjust,
+  adjust: adjustKey,
   toggleLock: () => {
     locked = !locked;
     debug.setLock(locked);

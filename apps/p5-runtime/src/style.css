@@ -139,10 +139,34 @@ body {
   color: #7e93a8;
   margin-bottom: 8px;
 }
+.emu-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.emu-btn {
+  font: inherit;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 200, 255, 0.25);
+  background: rgba(120, 200, 255, 0.06);
+  color: #9fb3c8;
+  cursor: pointer;
+}
+.emu-btn.active {
+  background: rgba(127, 208, 255, 0.85);
+  color: #04121f;
+  border-color: rgba(127, 208, 255, 0.9);
+}
+.emu-gridwrap {
+  display: flex;
+  justify-content: center;
+}
 .emu-grid {
   display: grid;
   gap: 3px;
-  width: 232px;
 }
 .emu-cell {
   aspect-ratio: 1;

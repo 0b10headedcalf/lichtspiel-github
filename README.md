@@ -64,7 +64,11 @@ Then drive it from the keyboard (no hardware required):
 - `1`–`5` — select visual template
 - `←/→` — semantic distance · `↑/↓` — mutation amount
 - `space` — lock/unlock · `r` — randomize safe params · `d` — toggle debug panel
-- `g` — toggle the on-screen monome emulator
+- `g` — toggle the on-screen monome emulator (with a Grid 64/128 + Arc 2/4 switcher)
+
+The app **detects which monome is connected and adapts** — grid columns are
+param faders (the `Lichtspiel_v3` idiom), and the surface scales to Grid 64/128
++ Arc 2/4. See [`docs/monome.md`](docs/monome.md).
 
 Run the full local stack:
 

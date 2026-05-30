@@ -7,8 +7,11 @@
 import type {
   ArcDeltaEvent,
   ArcKeyEvent,
+  DeviceAttached,
+  DeviceDetached,
   GridKeyEvent,
   LiveSessionState,
+  MonomeSetup,
   StatusPayload,
   VisualParamVector,
 } from '@lichtspiel/schemas';
@@ -24,6 +27,11 @@ export interface AppEvents {
   'monome.grid': GridKeyEvent;
   'monome.arcDelta': ArcDeltaEvent;
   'monome.arcKey': ArcKeyEvent;
+  /** A device connected/disconnected (bridge serialosc detection, Phase 4). */
+  'device.attached': DeviceAttached;
+  'device.detached': DeviceDetached;
+  /** The active monome setup changed (detection or emulator switch). */
+  'monome.setup': MonomeSetup;
   /** Lock toggled. */
   'lock.toggle': { locked: boolean };
   /** Randomize current params within safe ranges. */

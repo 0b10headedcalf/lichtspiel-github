@@ -7,8 +7,10 @@
   venv works too.
 - A **Chromium** browser for the p5 runtime.
 - For the full installation: **Ableton Live Suite + Max for Live**, **serialosc**,
-  a **monome grid (m64_0175)** + **arc (m0000174)**, and the **monome Max package**.
-  None of these are needed for browser-only development.
+  a **monome grid + arc**, and the **monome Max package**. The app detects + adapts
+  to either device class — Grid 64 (`m64_0175`) / Arc 2 (`m0000174`) or Grid 128
+  (`m29496721`) / Arc 4 (`m0000007`); see `docs/monome.md`. None of this is needed
+  for browser-only development (use the on-screen emulator's device switcher).
 
 ## Install
 

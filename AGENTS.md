@@ -51,8 +51,15 @@ monome/keyboard controls work end-to-end.
 - Package names: `@lichtspiel/<name>`. Shared types live in
   `packages/schemas`; never duplicate the contracts.
 - Hardware/config defaults are in `.env.example` + `config/*.json`; serials
-  must be configurable, never hard-coded. Current serials: grid `m64_0175`,
-  arc `m0000174`. Treat `m29496721` / `m0000007` as historical only.
+  must be configurable, never hard-coded. The user owns **two device classes**
+  and the app must **detect which is connected and adapt** sketches + monome
+  mappings:
+  - **Grid 64** (8×8, `m64_0175`) + **Arc 2** (2 enc, `m0000174`) — primary
+    Lichtspiel target; `Lichtspiel_v3` is the idiom master built for it.
+  - **Grid 128** (8×16, `m29496721`) + **Arc 4** (4 enc, `m0000007`) — built
+    most of the windchime-animation corpus the templates were adapted from.
+  None of these are "historical" — support both. Never assume a fixed grid size
+  or encoder count; read it from the connected device (`device.attached`).
 - Any file adapted from a Windchime/Processing source must carry a header
   noting the source path and what was changed (see existing template headers).
 - Every layer produces readable logs with timestamp, source, target, type,

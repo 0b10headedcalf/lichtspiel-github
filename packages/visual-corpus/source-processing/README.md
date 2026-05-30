@@ -26,10 +26,22 @@ Utility lineage (adapted, fresh implementations):
   adapted from Windchime `createSketchHost`, retargeted to `VisualParamVector`
   + `LiveSessionState`.
 - **Monome event / LED protocol** (`packages/schemas/src/monome.ts`) — shapes
-  adapted from the Windchime animation `protocol` package, trimmed to the
-  current hardware (grid 64 + arc 2).
+  adapted from the Windchime animation `protocol` package, supporting **both**
+  device classes (grid 64/128, arc 2/4) via `monomeProfiles.ts`.
 - **serialosc bridge** (planned, `apps/live-bridge` Phase 4) — to be adapted
   from the Windchime animation Node `serialosc.ts` bridge.
+
+## Grid 64 / Arc 2 corpus (`processing_corpus_g64arc2/`)
+
+The user's newer **grid 64 + arc 2** sketches (the primary Lichtspiel target).
+The corpus the original templates came from (UPF, PatternGridWorld, etc.) was
+built on **grid 128 + arc 4**; this folder is grid64/arc2-native.
+
+| Source | Role | Lichtspiel use |
+|---|---|---|
+| `Lichtspiel_v3` | **Idiom master** — Ruttmann *Opus III* tunnel; defines the canonical grid64/arc2 control map (8 column-faders + arc turn/press). | Source for `monomeMapping.ts` (column-fader idiom) + the planned `lichtspielOpus` signature template. |
+| `Lichtspiel_v1`, `Lichtspiel_v2` | Earlier iterations of the idiom. | Reference. |
+| `monome_grid64_arc2_diagnostic1–7` | Hardware diagnostics (capability tests; v7 = full + parallel LED sweep). | Reference for the Phase 4 connection/diagnostics dashboard. |
 
 Rules going forward (see `AGENTS.md`):
 1. Adapt concepts; do not copy files verbatim.

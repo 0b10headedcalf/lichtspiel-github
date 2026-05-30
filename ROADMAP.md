@@ -69,16 +69,32 @@ Read real Live state. **Requires hands-on Max patching — human-in-the-loop.**
 bridge log · device loads without missing deps · M4L manual controls move p5
 params · device works when ML service is offline.
 
-## Phase 4 — Monome integration ⬜
+## Phase 4 — Monome integration & device adaptation 🟡
 
-Grid/arc control p5 through Max/Node.
+Grid/arc control p5, **adapting to whichever device is connected**. The user
+owns two device classes — Grid 64 (`m64_0175`) / Arc 2 (`m0000174`) and Grid 128
+(`m29496721`) / Arc 4 (`m0000007`) — and the app detects + adapts. The canonical
+control idiom is `Lichtspiel_v3` (the idiom master). See `docs/monome.md`.
 
-- ⬜ serialosc bridge (Node) or monome Max package; grid pages 1–3 + arc.
-- ⬜ LED/ring feedback as fader-style state, not static fully-lit.
-- ⬜ Debounce/rate-limit; keyboard fallback mirrors all monome events.
+- ✅ Device profile model (`schemas/monomeProfiles.ts`) + `profileFromAttached()`.
+- ✅ Profile-aware **column-fader** mapping (`monomeMapping.ts`) — the
+  `Lichtspiel_v3` idiom generalized to `VisualParamVector`; adapts to grid width
+  (grid-128 cols 8–15 → scene buttons) + arc encoder count (arc-4 adds enc2/3).
+- ✅ On-screen emulator with a Grid 64/128 + Arc 2/4 switcher (simulated
+  detection) — verified adapting live (16 cols / 4 rings) + driving params.
+- ✅ `device.attached`/`device.detached` routed bridge → bus → active setup.
+- ⬜ serialosc layer in `live-bridge` (adapt windchime-animation `serialosc.ts`):
+  discover devices, emit `device.attached/detached` + `grid.key`/`arc.delta`/
+  `arc.key`, flush `led.*`/`ring.*`.
+- ⬜ LED/ring feedback as fader-style state (templates write `ledOut`; host
+  flushes; LED width follows the active grid).
+- ⬜ Debounce/rate-limit so input flooding never freezes the patch/browser.
+- ⬜ Connection/diagnostics **dashboard** UI (ref: `processing_corpus_g64arc2/
+  monome_grid64_arc2_diagnostic1–7`; v7 = full-capability + parallel LED sweep).
 
-**Acceptance:** grid button changes scene · LEDs reflect values/selection ·
-arc encoders morph params continuously · rapid input never freezes the system.
+**Acceptance:** grid column-faders move params · grid press selects scenes ·
+arc encoders morph continuously · LEDs reflect values · plugging in grid 64 vs
+128 / arc 2 vs 4 adapts the surface · rapid input never freezes.
 
 ## Phase 5 — Metadata retrieval 🟡 (head start shipped)
 
@@ -124,6 +140,9 @@ logs, never a broken performance state.
 
 ## Backlog / stretch 🔭
 
+**`lichtspielOpus` signature template** — port `Lichtspiel_v3`'s Ruttmann
+*Opus III* morphing tunnel (interior sphere morphs + 2D rect forms + film-grain
+damage) as the hero scene; it already defines the canonical monome idiom. ·
 Strudel audio co-generation · Hydra backend · TouchDesigner/Syphon/NDI handoff ·
 fine-tuned mapping over a personal visual corpus · in-Live p5 editor ·
 clip→visual preset saving in the Live Set · packaged M4L installer · the full
