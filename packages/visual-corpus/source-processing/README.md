@@ -41,7 +41,8 @@ built on **grid 128 + arc 4**; this folder is grid64/arc2-native.
 |---|---|---|
 | `Lichtspiel_v3` | **Idiom master** — Ruttmann *Opus III* tunnel; defines the canonical grid64/arc2 control map (8 column-faders + arc turn/press). | Source for `monomeMapping.ts` (column-fader idiom) + the planned `lichtspielOpus` signature template. |
 | `Lichtspiel_v1`, `Lichtspiel_v2` | Earlier iterations of the idiom. | Reference. |
-| `monome_grid64_arc2_diagnostic1–7` | Hardware diagnostics (capability tests; v7 = full + parallel LED sweep). | Reference for the Phase 4 connection/diagnostics dashboard. |
+| `monome_grid64_arc2_diagnostic1–7` | Hardware diagnostics (capability tests; v7 = full + parallel LED sweep). | Adapted into the digital-twin dashboard (`ui/monomeTwin.ts`); v7 was the model. |
+| `monome_capability_notes.md` | The user's verified capability notes (grid64/arc2 vs grid128/arc4: monobright vs varibright, global intensity, tilt, arc push, serialosc OSC contract, porting guidance). | Distilled into `docs/monome.md` + the `caps` model in `monomeProfiles.ts`. |
 
 Rules going forward (see `AGENTS.md`):
 1. Adapt concepts; do not copy files verbatim.

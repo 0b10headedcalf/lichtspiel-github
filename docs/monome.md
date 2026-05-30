@@ -23,19 +23,36 @@ size or encoder count**; read it from the connected device. Profiles live in
 The classes differ in capabilities — sketches + mappings must **adapt**, not
 assume. Each profile carries a typed `caps` object (`GridCaps` / `ArcCaps`):
 
-| Capability | Grid 64 | Grid 128 | Arc 2 | Arc 4 |
+| Capability | Grid 64 `m64_0175` | Grid 128 `m29496721` | Arc 2 `m0000174` | Arc 4 `m0000007` |
 |---|---|---|---|---|
-| cells | 64 (8×8) | 128 (8×16) | — | — |
+| cells / encoders | 64 (8×8) | 128 (8×16) | 2 enc | 4 enc |
+| per-key binary on/off | ✓ | ✓ | — | — |
+| per-key **varibright** 0–15 | ✗ monobright | edition-dep → assume ✗ | — | — |
+| **global** LED intensity 0–15 | ✓ | ✓ | — | — |
 | LED-map quads (8×8) | 1 | 2 | — | — |
-| varibright (per-LED 0–15) | ✓ | ✓ | ✓ | ✓ |
-| tilt sensor | ✓ | ✓ | — | — |
-| encoders | — | — | 2 | 4 |
-| ring LEDs / encoder | — | — | 64 | 64 |
-| encoder push (key) | — | — | ✓ | ✓ |
+| tilt sensor | ✓ | edition-dep | ✗ | ✗ |
+| ring LEDs (varibright 0–15) | — | — | 64 ✓ | 64 ✓ |
+| encoder push (`/enc/key`) | — | — | ~ optional | ~ optional |
 
-`varibright = false` means a monobright device: only binary `/grid/led/set` +
-one global `/grid/led/intensity`; the 0–15 levels stay *logical* (the twin still
-shows them — see below). The current hardware is varibright.
+**Key correction (verified on `m64_0175`):** the user's Grid 64 is a ~2007–2010
+*monobright* "series" grid — per-key LEDs are **on/off only**, with one shared
+**global intensity** (`/grid/led/intensity` 0–15). The 0–15 per-key levels are
+**logical**: the runtime + digital twin keep/show them, but the bridge flushes
+on/off + a global dimmer to that hardware. Grid 128 brightness is
+edition-dependent → assume monobright until a `/sys` query proves otherwise.
+**Arc rings are genuinely varibright** (true 0–15) — so the Arc carries the
+rich brightness language the Grid 64 can't show per key. Treat encoder **push**
+as best-effort (some arc editions lack `/enc/key`): rotation for required
+controls, push only for optional toggles, keyboard fallback for critical clicks.
+
+**Porting / compiling Processing → p5 must be capability-aware.** Rather than
+picking which sketches to port by the device they were authored on, every p5
+template + mapping reads the active profile's `caps` and adapts (grid width →
+fader count + scene buttons; encoder count → which arc params exist; varibright
+vs monobright+global → per-key level feedback vs binary + global dimmer; quads →
+LED-map batching). One codebase, either controller. **Don't port 1:1** from
+grid128/arc4 → grid64/arc2 — compress: 16-step → 8-step/2 pages, 4 fader groups
+→ 2 macros/page-switch, 4 arc objects → 2 macro groups, 4 playheads → 2.
 
 **Porting / compiling Processing → p5 must be capability-aware.** Rather than
 picking which sketches to port by the device they were authored on, every p5
@@ -125,6 +142,77 @@ With real hardware (Phase 4) the same LED frame flushes to the device over the
 bridge and real `device.attached` / `grid.key` / `arc.*` events drive the twin.
 Source diagnostics for reference: `processing_corpus_g64arc2/
 monome_grid64_arc2_diagnostic1–7` (v7 = full capability + fast parallel sweep).
+
+## serialosc OSC contract (Phase 4 `live-bridge` spec)
+
+The bridge talks **raw serialosc OSC** (higher-level wrappers caused grid/arc
+routing conflicts in the source project — avoid them). Ports: serialosc on
+`12002` (`LICHTSPIEL_SERIALOSC_PORT`), the app listens on `13333`
+(`LICHTSPIEL_OSC_APP_PORT`), with a chosen prefix (`LICHTSPIEL_OSC_PREFIX`,
+e.g. `/lichtspiel`).
+
+Discovery + per-device config:
+```
+→ /serialosc/list <host> <port>          # ask for devices
+← /serialosc/device <id> <type> <port>   # one reply per device
+→ /sys/host <host> ; /sys/port <appPort> ; /sys/prefix <prefix>
+→ /sys/query ; /sys/size                 # confirm + read dimensions → device.attached
+```
+
+Input (device → bridge → bus `monome.event`):
+```
+/PREFIX/grid/key  x y s         # s = 1 down / 0 up   → grid.key
+/PREFIX/enc/delta n d           # n = 0..enc-1, signed → arc.delta
+/PREFIX/enc/key   n s           # optional             → arc.key
+/PREFIX/tilt      n x y z       # if /tilt/set n 1 enabled → tilt (Phase 4+)
+```
+
+LED output (bus → bridge → device), chosen by `caps`:
+```
+# monobright grid (Grid 64): binary + global dimmer
+/PREFIX/grid/led/set x y s    /PREFIX/grid/led/row x y d
+/PREFIX/grid/led/col x y d    /PREFIX/grid/led/map x y d[8]
+/PREFIX/grid/led/all s        /PREFIX/grid/led/intensity i      # i = 0..15
+# varibright grid (if a sys query proves it): per-key levels
+/PREFIX/grid/led/level/set|map|row|col …                       # 0..15
+# arc rings (always varibright)
+/PREFIX/ring/set n x a   /PREFIX/ring/all n a
+/PREFIX/ring/map n d[64] /PREFIX/ring/range n x1 x2 a           # a = 0..15
+```
+
+Bridge implementation rules (from the source diagnostics): separate handlers
+per subsystem (`handleGridKey` / `handleArcDelta` / `handleArcKey` /
+`handleTilt`), **rate-limit** high-frequency output (~30 Hz for tilt→LED),
+prefer batched `row`/`col`/`map`/`range`/`all` over many single-LED messages,
+and never block the loop (`delay()`); use a `millis()` scheduler.
+
+## Tilt (grid only, Phase 4+)
+
+Series grids have an accelerometer. Enable `/PREFIX/tilt/set 0 1`; incoming
+`/PREFIX/tilt 0 x y z` (treat as uncalibrated continuous control, not physical
+units). Good targets: camera drift / gravity vector / attractor position /
+field bias / global modulation depth. It would map naturally to
+`VisualParamVector` axes (e.g. tilt x/y → a 2-axis pad over motion+turbulence,
+tilt z → cameraDepth). Not modeled as an input event yet — add a `tilt` event
++ `caps.tilt` gating when the serialosc layer lands.
+
+## Role guidance (compressed for grid 64 + arc 2)
+
+- **Grid 64** — discrete state, binary patterning, mode selection, spatial
+  density, blink/animation, global intensity, + tilt. *Don't* encode meaning in
+  per-key brightness (it's monobright).
+- **Arc 2** — continuous + true varibright ring feedback: playhead/phase, loop
+  range, parameter amount, A/B morph, global motion + density. enc0/enc1 are
+  the two macros (vs four independent lanes on an Arc 4).
+
+## Sources
+
+- Grid editions — https://monome.org/docs/grid/editions/
+- Arc editions — https://monome.org/docs/arc/editions/
+- serialosc OSC reference — https://monome.org/docs/serialosc/osc/
+- serialosc serial protocol — https://monome.org/docs/serialosc/serial.txt
+- In-repo: [`packages/visual-corpus/source-processing/monome_capability_notes.md`](../packages/visual-corpus/source-processing/monome_capability_notes.md)
+  — the user's verified capability notes this section is distilled from.
 
 ## Signature template (planned)
 

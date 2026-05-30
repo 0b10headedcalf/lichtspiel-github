@@ -19,21 +19,35 @@ export type ArcSize = '2' | '4' | 'other';
 
 /**
  * Grid capabilities/limitations. Differ across editions/classes — sketches +
- * mappings must adapt rather than assume. `varibright` = per-LED 0..15 via
- * /grid/led/level/*; if false the hardware is monobright (binary /grid/led/set
- * + one global /grid/led/intensity) and the 0..15 levels are logical-only.
- * `tilt` = has an accelerometer (/grid/tilt). `quads` = number of 8×8 LED-map
- * blocks (64 → 1, 128 → 2).
+ * mappings + LED-flush must adapt rather than assume.
+ *
+ * `varibright` = the HARDWARE shows per-LED 0..15 (/grid/led/level/*). The
+ * user's Grid 64 (m64_0175, ~2007–2010 "series") is MONOBRIGHT: per-key LEDs
+ * are on/off only, so varibright = false and the 0..15 levels are LOGICAL —
+ * the digital twin still shows them, but the bridge collapses to on/off + a
+ * global dimmer when flushing to that hardware. Grid 128 brightness is
+ * edition-dependent → default conservatively to monobright until a sys query
+ * proves otherwise.
+ * `globalIntensity` = one shared brightness for all on-LEDs
+ * (/grid/led/intensity 0..15) — true even on monobright grids.
+ * `tilt` = has an accelerometer (/tilt enable + incoming /tilt n x y z).
+ * `quads` = number of 8×8 LED-map blocks (64 → 1, 128 → 2).
  */
 export interface GridCaps {
   cells: number;
   quads: number;
   ledLevels: number;
   varibright: boolean;
+  globalIntensity: boolean;
   tilt: boolean;
 }
 
-/** Arc capabilities. `push` = encoders are clickable (arc key events). */
+/**
+ * Arc capabilities. `push` = encoders send key/click events (/enc/key). Some
+ * Arc editions have no keypress, so treat `push` as best-effort: use rotation
+ * for required controls and a keyboard fallback for any critical click.
+ * Ring LEDs are genuinely varibright (0..15) on all arcs.
+ */
 export interface ArcCaps {
   encoders: number;
   ringLeds: number;
@@ -73,7 +87,8 @@ export const GRID_64: GridProfile = Object.freeze({
   cols: 8,
   size: '64',
   label: 'Grid 64',
-  caps: { cells: 64, quads: 1, ledLevels: 16, varibright: true, tilt: true },
+  // m64_0175 is a monobright "series" grid: per-key on/off + global dimmer.
+  caps: { cells: 64, quads: 1, ledLevels: 16, varibright: false, globalIntensity: true, tilt: true },
 });
 
 export const GRID_128: GridProfile = Object.freeze({
@@ -83,7 +98,8 @@ export const GRID_128: GridProfile = Object.freeze({
   cols: 16,
   size: '128',
   label: 'Grid 128',
-  caps: { cells: 128, quads: 2, ledLevels: 16, varibright: true, tilt: true },
+  // brightness is edition-dependent — assume monobright until a sys query proves varibright.
+  caps: { cells: 128, quads: 2, ledLevels: 16, varibright: false, globalIntensity: true, tilt: true },
 });
 
 export const ARC_2: ArcProfile = Object.freeze({
@@ -141,13 +157,14 @@ export function profileFromAttached(d: DeviceAttached): GridProfile | ArcProfile
       cols,
       size: cols > 8 ? '128' : cols === 8 && rows === 8 ? '64' : 'other',
       label: `Grid ${rows * cols}`,
-      // varibright/tilt can't be known from device.attached alone — assume the
-      // modern capability set; the bridge can refine it from a sys/info query.
+      // varibright/tilt can't be known from device.attached alone — default
+      // conservatively to monobright; the bridge can refine from a sys query.
       caps: {
         cells: rows * cols,
         quads: Math.ceil(cols / 8) * Math.ceil(rows / 8),
         ledLevels: 16,
-        varibright: true,
+        varibright: false,
+        globalIntensity: true,
         tilt: true,
       },
     };

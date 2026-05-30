@@ -227,11 +227,16 @@ export class MonomeTwin {
   private renderCaps(): void {
     const g = this.setup.grid;
     const a = this.setup.arc;
+    const bright = g
+      ? g.caps.varibright
+        ? 'varibright 0–15'
+        : `monobright${g.caps.globalIntensity ? ' + global 0–15' : ''} (levels logical)`
+      : '';
     const gline = g
-      ? `grid: ${g.cols}×${g.rows} (${g.caps.cells}) · ${g.caps.quads} quad${g.caps.quads > 1 ? 's' : ''} · ${g.caps.varibright ? 'varibright 0–15' : 'monobright'} · tilt ${g.caps.tilt ? '✓' : '✗'}`
+      ? `grid: ${g.cols}×${g.rows} (${g.caps.cells}) · ${g.caps.quads} quad${g.caps.quads > 1 ? 's' : ''} · ${bright} · tilt ${g.caps.tilt ? '✓' : '✗'}`
       : 'grid: none';
     const aline = a
-      ? `arc: ${a.caps.encoders} enc × ${a.caps.ringLeds} LED · push ${a.caps.push ? '✓' : '✗'}`
+      ? `arc: ${a.caps.encoders} enc × ${a.caps.ringLeds} LED (varibright) · push ${a.caps.push ? '~' : '✗'}`
       : 'arc: none';
     this.capsEl.textContent = `${gline}\n${aline}`;
   }
