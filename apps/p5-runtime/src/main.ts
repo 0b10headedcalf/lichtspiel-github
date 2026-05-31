@@ -9,15 +9,13 @@
 import './style.css';
 import {
   type LedFramePayload,
-  type MonomeSetup,
   type NumericParamKey,
   type VisualParamVector,
-  DEFAULT_SETUP,
   clamp01,
   describeSetup,
-  profileFromAttached,
   wire,
 } from '@lichtspiel/schemas';
+import { createMonomeDevices } from './monomeDevices.js';
 import { createBus } from './messageBus.js';
 import { SketchHost } from './sketchHost.js';
 import { TemplateRegistry } from './templateRegistry.js';
@@ -43,9 +41,10 @@ const bus = createBus();
 const registry = new TemplateRegistry();
 registry.registerAll(TEMPLATES);
 
-// Active monome setup — defaults to the primary target (grid 64 + arc 2),
-// updated by the twin's device switch or a real device.attached from the bridge.
-let setup: MonomeSetup = DEFAULT_SETUP;
+// Authoritative monome state: real hardware (device.attached/detached) always
+// wins over the twin's manual simulation. Starts empty (greyed) — with no
+// hardware, click a size in the twin to simulate one (browser-only dev).
+const devices = createMonomeDevices();
 
 const debug = new DebugPanel(hud, hudHelp);
 
@@ -57,7 +56,7 @@ const wsUrl = `ws://${__BIND_HOST__}:${__BRIDGE_WS_PORT__}`;
 const bridge = new BridgeClient({ url: wsUrl, bus });
 const sendLedFrame = (payload: LedFramePayload): void => bridge.send(wire('led.frame', payload));
 
-const twin = new MonomeTwin(twinEl, bus, setup, sendLedFrame);
+const twin = new MonomeTwin(twinEl, bus, devices, sendLedFrame);
 
 const host = new SketchHost({
   parent: stage,
@@ -111,7 +110,7 @@ bus.on('status', ({ connected }) => {
 });
 
 // Monome (real or emulated) → the profile-aware column-fader idiom + per-sketch dispatch.
-const mapping = createMonomeMapping(() => setup, {
+const mapping = createMonomeMapping(() => devices.active(), {
   setParam: (key, value) => host.setTargetParams({ [key]: value } as Partial<VisualParamVector>),
   nudgeParam: (key, delta) => adjustKey(key, delta),
   selectSceneIndex: (i) => {
@@ -138,22 +137,16 @@ bus.on('monome.arcKey', (e) => {
   host.dispatchArcKey(e);
 });
 
-// Device detection → adapt. Emulator switcher emits 'monome.setup' now; the
-// bridge's serialosc 'device.attached' drives the same path in Phase 4.
-bus.on('monome.setup', (s) => {
-  setup = s;
-  console.info(`[lichtspiel] monome setup → ${describeSetup(s)}`);
-});
-bus.on('device.attached', (d) => {
-  const prof = profileFromAttached(d);
-  setup = prof.kind === 'grid' ? { ...setup, grid: prof } : { ...setup, arc: prof };
-  twin.setSetup(setup);
-  console.info(`[lichtspiel] device attached → ${describeSetup(setup)}`);
-});
-bus.on('device.detached', (d) => {
-  if (setup.grid?.serial === d.id) setup = { ...setup, grid: null };
-  if (setup.arc?.serial === d.id) setup = { ...setup, arc: null };
-  twin.setSetup(setup);
+// Device detection → adapt. Real hardware (serialosc device.attached/detached)
+// and the twin's manual switch (monome.setup → simulation) both flow through the
+// authoritative `devices` model; real hardware always wins. One subscriber
+// re-points everything when the *active* setup changes.
+bus.on('device.attached', (d) => devices.attach(d));
+bus.on('device.detached', (d) => devices.detach(d));
+bus.on('monome.setup', (s) => devices.setSimulated(s));
+devices.onChange((active, src) => {
+  twin.setSetup(active);
+  console.info(`[lichtspiel] monome (${src}) → ${describeSetup(active)}`);
 });
 
 // ── Keyboard handlers ────────────────────────────────────────────────

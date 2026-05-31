@@ -39,6 +39,8 @@ export class BridgeServer {
   private nextId = 1;
   private lastError: string | undefined;
   private monomeConnected = false;
+  /** Current attached monome devices, keyed by id — replayed to new p5 clients. */
+  private readonly attachedDevices = new Map<string, WireMessage>();
   private readonly opts: BridgeServerOptions;
 
   constructor(opts: BridgeServerOptions) {
@@ -91,6 +93,12 @@ export class BridgeServer {
       client.role = m.payload.role;
       logger.info('hello', { source: `${client.role}#${client.id}`, type: 'hello' });
       this.sendTo(client.ws, wire('status', this.status()));
+      // Replay current device state so a freshly-(re)connected p5 snaps to the
+      // hardware that's actually plugged in — device.attached is otherwise a
+      // one-shot event at discovery, missed by clients that connect later.
+      if (client.role === 'p5') {
+        for (const dev of this.attachedDevices.values()) this.sendTo(client.ws, dev);
+      }
       this.emitStatus();
       return;
     }
@@ -151,7 +159,19 @@ export class BridgeServer {
       return;
     }
 
-    // device.attached / device.detached / status: log + relay to p5.
+    // Cache device state (for replay to new p5 clients) + relay to p5.
+    if (isType(m, 'device.attached')) {
+      this.attachedDevices.set(m.payload.id, m);
+      this.broadcast(['p5'], m);
+      return;
+    }
+    if (isType(m, 'device.detached')) {
+      this.attachedDevices.delete(m.payload.id);
+      this.broadcast(['p5'], m);
+      return;
+    }
+
+    // status + anything else: relay to p5.
     this.broadcast(['p5'], m);
   }
 

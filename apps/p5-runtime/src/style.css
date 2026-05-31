@@ -196,6 +196,18 @@ body {
   color: #04121f;
   border-color: rgba(127, 208, 255, 0.9);
 }
+/* Real hardware drives this size: highlight green + lock it. */
+.emu-btn.connected {
+  background: rgba(142, 255, 192, 0.9);
+  color: #04121f;
+  border-color: rgba(142, 255, 192, 0.95);
+}
+/* A size you can't switch to because real hardware of that kind is connected. */
+.emu-btn.disabled,
+.emu-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
 .twin-canvas {
   cursor: pointer;
 }

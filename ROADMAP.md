@@ -141,6 +141,31 @@ vs 128 / arc 2 vs 4 adapts the surface ✅ · rapid input never freezes ✅.
 input (grid.key/arc.delta/arc.key incl. coalesced deltas), performance feedback
 (fader columns + arc comets), and the Fast ∥ sweep all confirmed end-to-end.
 
+## Phase 4.5 — Animation corpus + monome idiom layer 🟡 (in progress)
+
+Bring the windchime-animation p5 sketch corpus into Lichtspiel as capability-aware,
+hardware-adaptive templates with a reusable monome "idiom" abstraction + variant
+system. Full plan: `~/.claude/plans/delegated-foraging-cookie.md` (approved).
+Decisions: adapt windchime p5 + variants · hybrid control (uniform fader baseline
++ per-sketch idioms) · adaptive + tuned variants · all 10 sketches.
+
+- ✅ **Part 1 — Hardware foundation (done + hardware-verified across all 4 devices,
+  continuous hot-swap, 2026-06-01).** Corrected caps (grid128 varibright/no-tilt,
+  arc4 per-encoder push); authoritative `monomeDevices` (connected vs simulated,
+  hardware-wins); twin auto-snaps + greys out absent devices + replay-on-connect;
+  reliable poll-based reconcile-detach (debounced); **LED diffing** (send-on-change,
+  fixed the 30 Hz flush that crashed the Arc 4 clone); debounced notify (no storm);
+  and **self-healing auto-recovery** (restarts serialoscd when a known device is
+  present at USB but unlisted — recovers the Arc 4 FTDI clone on re-plug). Note:
+  recovery is daemon-wide so it briefly blips all devices — refine later if wanted.
+- ⬜ **Part 2 — Idiom library** (`apps/p5-runtime/src/idioms/`): capability-aware
+  faderBank / stepSequencer / cellPaint / arcMacros, generalizing `monomeMapping.ts`
+  + `monomeFeedback.ts` + windchime's gestural dictionaries. + headless idioms-smoke.
+- ⬜ **Part 3 — Sketch adaptation + variants**: contract additions (`hardwareTarget`,
+  `idioms`, `altImpls`, `setProfile`, `MountContext.setup`, `VariantRecord`); port
+  the Opus III hero (`Lichtspiel_v3.pde`) + adapt the 9 windchime families with their
+  variant system. Wave A (hero + 2) → gate → Wave B (rest).
+
 ## Phase 5 — Metadata retrieval 🟡 (head start shipped)
 
 Ableton state *suggests* visuals (rule-based, no model).

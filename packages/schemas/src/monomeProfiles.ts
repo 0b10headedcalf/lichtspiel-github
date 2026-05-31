@@ -46,13 +46,16 @@ export interface GridCaps {
  * Arc capabilities. `push` = encoders send key/click events (/enc/key). Some
  * Arc editions have no keypress, so treat `push` as best-effort: use rotation
  * for required controls and a keyboard fallback for any critical click.
- * Ring LEDs are genuinely varibright (0..15) on all arcs.
+ * `pushPerEncoder` = each encoder has its own key (`/enc/key 0..n-1`), as on the
+ * early-2010s arcs + the user's wood-panel clone — vs a single shared button on
+ * the 2025 edition. Ring LEDs are genuinely varibright (0..15) on all arcs.
  */
 export interface ArcCaps {
   encoders: number;
   ringLeds: number;
   ledLevels: number;
   push: boolean;
+  pushPerEncoder: boolean;
 }
 
 export interface GridProfile {
@@ -98,8 +101,9 @@ export const GRID_128: GridProfile = Object.freeze({
   cols: 16,
   size: '128',
   label: 'Grid 128',
-  // brightness is edition-dependent — assume monobright until a sys query proves varibright.
-  caps: { cells: 128, quads: 2, ledLevels: 16, varibright: false, globalIntensity: true, tilt: true },
+  // m29496721 is a 2022-edition grid: VARIBRIGHT (per-key 0–15) + global
+  // intensity, two 8×8 quads, NO tilt (tilt was dropped on the aluminium grids).
+  caps: { cells: 128, quads: 2, ledLevels: 16, varibright: true, globalIntensity: true, tilt: false },
 });
 
 export const ARC_2: ArcProfile = Object.freeze({
@@ -109,7 +113,8 @@ export const ARC_2: ArcProfile = Object.freeze({
   ringLeds: 64,
   size: '2',
   label: 'Arc 2',
-  caps: { encoders: 2, ringLeds: 64, ledLevels: 16, push: true },
+  // varibright rings; encoder push best-effort (treat as per-encoder).
+  caps: { encoders: 2, ringLeds: 64, ledLevels: 16, push: true, pushPerEncoder: true },
 });
 
 export const ARC_4: ArcProfile = Object.freeze({
@@ -119,7 +124,9 @@ export const ARC_4: ArcProfile = Object.freeze({
   ringLeds: 64,
   size: '4',
   label: 'Arc 4',
-  caps: { encoders: 4, ringLeds: 64, ledLevels: 16, push: true },
+  // m0000007 is a wood-panel clone emulating the early-2010s arc: varibright
+  // rings + a key per encoder (/enc/key 0..3).
+  caps: { encoders: 4, ringLeds: 64, ledLevels: 16, push: true, pushPerEncoder: true },
 });
 
 export const KNOWN_GRIDS: Record<string, GridProfile> = {
@@ -158,14 +165,15 @@ export function profileFromAttached(d: DeviceAttached): GridProfile | ArcProfile
       size: cols > 8 ? '128' : cols === 8 && rows === 8 ? '64' : 'other',
       label: `Grid ${rows * cols}`,
       // varibright/tilt can't be known from device.attached alone — default
-      // conservatively to monobright; the bridge can refine from a sys query.
+      // conservatively (monobright commands work on varibright grids too; tilt
+      // is rare on modern grids). A sys query could refine this later.
       caps: {
         cells: rows * cols,
         quads: Math.ceil(cols / 8) * Math.ceil(rows / 8),
         ledLevels: 16,
         varibright: false,
         globalIntensity: true,
-        tilt: true,
+        tilt: false,
       },
     };
   }
@@ -179,7 +187,7 @@ export function profileFromAttached(d: DeviceAttached): GridProfile | ArcProfile
     ringLeds: 64,
     size: encoders >= 4 ? '4' : encoders === 2 ? '2' : 'other',
     label: `Arc ${encoders}`,
-    caps: { encoders, ringLeds: 64, ledLevels: 16, push: true },
+    caps: { encoders, ringLeds: 64, ledLevels: 16, push: true, pushPerEncoder: true },
   };
 }
 

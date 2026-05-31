@@ -27,23 +27,26 @@ assume. Each profile carries a typed `caps` object (`GridCaps` / `ArcCaps`):
 |---|---|---|---|---|
 | cells / encoders | 64 (8×8) | 128 (8×16) | 2 enc | 4 enc |
 | per-key binary on/off | ✓ | ✓ | — | — |
-| per-key **varibright** 0–15 | ✗ monobright | edition-dep → assume ✗ | — | — |
+| per-key **varibright** 0–15 | ✗ monobright | ✓ (2022 edition) | — | — |
 | **global** LED intensity 0–15 | ✓ | ✓ | — | — |
 | LED-map quads (8×8) | 1 | 2 | — | — |
-| tilt sensor | ✓ | edition-dep | ✗ | ✗ |
+| tilt sensor | ✓ | ✗ (aluminium) | ✗ | ✗ |
 | ring LEDs (varibright 0–15) | — | — | 64 ✓ | 64 ✓ |
-| encoder push (`/enc/key`) | — | — | ~ optional | ~ optional |
+| encoder push (`/enc/key`) | — | — | ~ best-effort | ✓ per-encoder (clone) |
 
-**Key correction (verified on `m64_0175`):** the user's Grid 64 is a ~2007–2010
-*monobright* "series" grid — per-key LEDs are **on/off only**, with one shared
-**global intensity** (`/grid/led/intensity` 0–15). The 0–15 per-key levels are
-**logical**: the runtime + digital twin keep/show them, but the bridge flushes
-on/off + a global dimmer to that hardware. Grid 128 brightness is
-edition-dependent → assume monobright until a `/sys` query proves otherwise.
-**Arc rings are genuinely varibright** (true 0–15) — so the Arc carries the
-rich brightness language the Grid 64 can't show per key. Treat encoder **push**
-as best-effort (some arc editions lack `/enc/key`): rotation for required
-controls, push only for optional toggles, keyboard fallback for critical clicks.
+**Capability facts (verified hardware + 2026-05 research):** The user's Grid 64
+(`m64_0175`) is a ~2007–2010 *monobright* "series" grid — per-key LEDs are
+**on/off only** with one shared **global intensity** (`/grid/led/intensity`
+0–15); its 0–15 per-key levels are **logical** (the runtime + twin keep/show
+them, but the bridge flushes on/off + a global dimmer). The Grid 128
+(`m29496721`) is a **2022 edition: genuinely varibright** (per-key 0–15 via
+`/grid/led/level/*`), global intensity, two 8×8 quads, **no tilt** (tilt was
+dropped on the aluminium grids). Varibright grids still accept the monobright
+commands, so the binary path stays a safe fallback. **Arc rings are varibright**
+(true 0–15) on all arcs. The user's Arc 4 (`m0000007`) is a wood-panel clone
+emulating the early-2010s arc → **per-encoder push** (`/enc/key 0..3`); the Arc 2
+(`m0000174`) push is best-effort (`caps.pushPerEncoder` gates whether per-encoder
+press is reliable; keyboard fallback covers any critical click).
 
 **Porting / compiling Processing → p5 must be capability-aware.** Rather than
 picking which sketches to port by the device they were authored on, every p5
@@ -204,6 +207,30 @@ per subsystem (`handleGridKey` / `handleArcDelta` / `handleArcKey` /
 `handleTilt`), **rate-limit** high-frequency output (~30 Hz for tilt→LED),
 prefer batched `row`/`col`/`map`/`range`/`all` over many single-LED messages,
 and never block the loop (`delay()`); use a `millis()` scheduler.
+
+### Discovery robustness + the Arc 4 clone (learned the hard way, 2026-06-01)
+
+The user's **Arc 4 is a wood-panel FTDI clone** that serialosc handles less
+robustly than the production devices. Hard-won rules baked into `serialosc.ts`:
+
+- **Never flush unchanged LED frames.** The twin emits at ~30 Hz; sending all 4
+  arc rings every tick (~120 `/ring/map`/s) **overwhelmed the clone's serial link
+  and made it disconnect**, which then drove an add/remove storm. Fix: **diff per
+  ring/quad** — only send on change (idle arc = zero traffic). This is the single
+  most important rule for arc stability.
+- **Poll, don't trust the notify flood.** A flaky device makes serialosc emit a
+  storm of `/serialosc/add|remove`; reacting with re-lists amplifies it. We poll
+  `/serialosc/list` (~1.5 s) as the source of truth + arm notify only for a
+  *debounced* fast-detect; **detach is reconcile-based** (a device missing from
+  `DETACH_MISSES` consecutive polls is dropped — debounced so flicker doesn't thrash).
+- **Self-heal stuck enumeration.** On re-plug, serialoscd intermittently leaves
+  the clone present-at-USB-but-unlisted (its `tty.usbserial-m0000007` exists, even
+  its `serialosc-device` runs, but `/serialosc/list` omits it). The bridge detects
+  this (known serial's tty present but unattached for `STUCK_CYCLES`) and
+  **restarts the serialosc daemon** (`brew services restart serialosc`, bounded to
+  `MAX_RECOVERY_ATTEMPTS`/episode, then asks for a manual replug). The restart is
+  daemon-wide, so all devices briefly blip — acceptable, refine later if possible.
+  Env: `LICHTSPIEL_SERIALOSC_RECOVER` / `LICHTSPIEL_SERIALOSC_RESTART_CMD`.
 
 ## Tilt (grid only, Phase 4+)
 

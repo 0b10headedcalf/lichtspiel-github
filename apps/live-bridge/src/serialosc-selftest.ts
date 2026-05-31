@@ -17,10 +17,19 @@ import { SerialOsc } from './serialosc.js';
 import { decodeOscMessage, encodeOscMessage, type OscMessage } from './oscCodec.js';
 
 const HOST = '127.0.0.1';
-const APP_PORT = 7404; // SerialOsc binds here
+const APP_PORT = 7404; // SerialOsc binds here (scenario 1)
 const DAEMON_PORT = 7405; // fake serialosc daemon
 const GRID_PORT = 7406; // fake Grid 64 endpoint
 const ARC_PORT = 7407; // fake Arc 2 endpoint
+// scenario 2 (varibright Grid 128) — isolated ports
+const APP_PORT2 = 7414;
+const DAEMON_PORT2 = 7415;
+const GRID128_PORT = 7416;
+// scenario 3 (reconcile detach) — isolated ports
+const APP_PORT3 = 7424;
+const DAEMON_PORT3 = 7425;
+const GRID_PORT3 = 7426;
+const ARC_PORT3 = 7427;
 const PREFIX = '/lichtspiel';
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -34,14 +43,18 @@ interface Fake {
   close: () => void;
 }
 
-function makeFake(port: number, onMessage?: (m: OscMessage, f: Fake) => void): Promise<Fake> {
+function makeFake(
+  port: number,
+  appPort: number,
+  onMessage?: (m: OscMessage, f: Fake) => void,
+): Promise<Fake> {
   return new Promise((resolve) => {
     const sock = createSocket('udp4');
     const received: OscMessage[] = [];
     const fake: Fake = {
       sock,
       received,
-      send: (address, args) => sock.send(encodeOscMessage(address, args), APP_PORT, HOST),
+      send: (address, args) => sock.send(encodeOscMessage(address, args), appPort, HOST),
       has: (address) => received.find((m) => m.address === address),
       close: () => {
         try {
@@ -69,18 +82,18 @@ async function main(): Promise<void> {
   };
 
   // ── fake daemon: answers /serialosc/list with our two devices ──
-  const daemon = await makeFake(DAEMON_PORT, (m, f) => {
+  const daemon = await makeFake(DAEMON_PORT, APP_PORT, (m, f) => {
     if (m.address === '/serialosc/list') {
       f.send('/serialosc/device', ['m64_0175', 'monome 64', GRID_PORT]);
       f.send('/serialosc/device', ['m0000174', 'monome arc 2', ARC_PORT]);
     }
   });
   // ── fake grid: replies to /sys/info with its size ──
-  const grid = await makeFake(GRID_PORT, (m, f) => {
+  const grid = await makeFake(GRID_PORT, APP_PORT, (m, f) => {
     if (m.address === '/sys/info') f.send('/sys/size', [8, 8]);
   });
   // ── fake arc: just records ──
-  const arc = await makeFake(ARC_PORT);
+  const arc = await makeFake(ARC_PORT, APP_PORT);
 
   // ── the real layer under test ──
   const attached: DeviceAttached[] = [];
@@ -90,6 +103,7 @@ async function main(): Promise<void> {
     serialoscPort: DAEMON_PORT,
     appPort: APP_PORT,
     prefix: PREFIX,
+    autoRecover: false, // never restart the real serialosc daemon during tests
     relistMs: 60_000, // don't re-poll during the test
     onDeviceAttached: (d) => attached.push(d),
     onDeviceDetached: () => {},
@@ -168,6 +182,112 @@ async function main(): Promise<void> {
   daemon.close();
   grid.close();
   arc.close();
+  await sleep(50);
+
+  // ── Scenario 2: a VARIBRIGHT Grid 128 uses the level/map path (not binary) ──
+  const daemon2 = await makeFake(DAEMON_PORT2, APP_PORT2, (m, f) => {
+    if (m.address === '/serialosc/list') {
+      f.send('/serialosc/device', ['m29496721', 'monome 128', GRID128_PORT]);
+    }
+  });
+  const grid128 = await makeFake(GRID128_PORT, APP_PORT2, (m, f) => {
+    if (m.address === '/sys/info') f.send('/sys/size', [16, 8]);
+  });
+  const attached2: DeviceAttached[] = [];
+  const serial2 = new SerialOsc({
+    host: HOST,
+    serialoscPort: DAEMON_PORT2,
+    appPort: APP_PORT2,
+    prefix: PREFIX,
+    autoRecover: false, // never restart the real serialosc daemon during tests
+    relistMs: 60_000,
+    onDeviceAttached: (d) => attached2.push(d),
+    onDeviceDetached: () => {},
+    onMonomeEvent: () => {},
+  });
+  serial2.start();
+  await sleep(250);
+  const g128 = attached2.find((d) => d.id === 'm29496721');
+  check(!!g128 && g128.cols === 16 && g128.rows === 8, 'grid128 attached as 16×8');
+  grid128.received.length = 0;
+  // full-on 8×16 frame → varibright grid flushes /grid/led/level/map for BOTH quads
+  const full = Array.from({ length: 8 }, () => new Array<number>(16).fill(15));
+  serial2.flushLeds({ grid: full });
+  await sleep(80);
+  const levelMaps = grid128.received.filter((m) => m.address === `${PREFIX}/grid/led/level/map`);
+  check(levelMaps.length === 2, 'varibright grid128 → 2× /grid/led/level/map (one per quad)');
+  check(
+    levelMaps.some((m) => m.args[0] === 0) && levelMaps.some((m) => m.args[0] === 8),
+    'level/map quads at x-offset 0 and 8',
+  );
+  check(
+    !grid128.has(`${PREFIX}/grid/led/map`),
+    'varibright grid128 did NOT use the monobright bitmask map',
+  );
+  // Diffing: re-flushing the SAME frame must send nothing (this is what stops
+  // the 30 Hz emit from hammering a device — the Arc 4 clone's failure mode).
+  grid128.received.length = 0;
+  serial2.flushLeds({ grid: full });
+  await sleep(80);
+  check(
+    grid128.received.filter((m) => m.address === `${PREFIX}/grid/led/level/map`).length === 0,
+    'diffing: unchanged frame re-flush sends nothing',
+  );
+  // A changed quad does send.
+  const changed = full.map((row) => row.slice());
+  changed[0]![0] = 0;
+  serial2.flushLeds({ grid: changed });
+  await sleep(80);
+  check(
+    grid128.received.filter((m) => m.address === `${PREFIX}/grid/led/level/map`).length === 1,
+    'diffing: a changed quad re-sends (only the changed one)',
+  );
+  serial2.stop();
+  daemon2.close();
+  grid128.close();
+  await sleep(50);
+
+  // ── Scenario 3: a device unplugged WITHOUT a /serialosc/remove is still
+  //    detached, because the periodic re-list reconciles what's advertised. ──
+  let listCount3 = 0;
+  const daemon3 = await makeFake(DAEMON_PORT3, APP_PORT3, (m, f) => {
+    if (m.address === '/serialosc/list') {
+      listCount3++;
+      // first poll: grid + arc; later polls: grid "unplugged" (arc only)
+      if (listCount3 === 1) f.send('/serialosc/device', ['m64_0175', 'monome 64', GRID_PORT3]);
+      f.send('/serialosc/device', ['m0000174', 'monome arc 2', ARC_PORT3]);
+    }
+  });
+  const grid3 = await makeFake(GRID_PORT3, APP_PORT3, (m, f) => {
+    if (m.address === '/sys/info') f.send('/sys/size', [8, 8]);
+  });
+  const arc3 = await makeFake(ARC_PORT3, APP_PORT3);
+  const attached3: DeviceAttached[] = [];
+  const detached3: string[] = [];
+  const serial3 = new SerialOsc({
+    host: HOST,
+    serialoscPort: DAEMON_PORT3,
+    appPort: APP_PORT3,
+    prefix: PREFIX,
+    autoRecover: false, // never restart the real serialosc daemon during tests
+    relistMs: 600, // > POLL_WINDOW_MS so each poll's reconcile runs between polls
+    onDeviceAttached: (d) => attached3.push(d),
+    onDeviceDetached: (d) => detached3.push(d.id),
+    onMonomeEvent: () => {},
+  });
+  serial3.start();
+  await sleep(300); // first poll attaches both
+  check(
+    attached3.some((d) => d.id === 'm64_0175') && attached3.some((d) => d.id === 'm0000174'),
+    'reconcile: grid64 + arc2 attached on first poll',
+  );
+  await sleep(1700); // later polls omit the grid → after DETACH_MISSES, reconcile detaches it
+  check(detached3.includes('m64_0175'), 'reconcile: unplugged grid64 detached (no /serialosc/remove)');
+  check(!detached3.includes('m0000174'), 'reconcile: still-listed arc2 NOT detached');
+  serial3.stop();
+  daemon3.close();
+  grid3.close();
+  arc3.close();
   await sleep(50);
 
   if (failures > 0) {

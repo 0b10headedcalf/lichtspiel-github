@@ -46,6 +46,12 @@ serial = new SerialOsc({
   appPort: Number(process.env['LICHTSPIEL_OSC_APP_PORT'] ?? 13333),
   prefix,
   ...(process.env['LICHTSPIEL_LED_HZ'] ? { ledHz: Number(process.env['LICHTSPIEL_LED_HZ']) } : {}),
+  // Auto-restart serialosc when a known device is present at USB but unlisted
+  // (recovers the Arc 4 clone's flaky FTDI enumeration). Disable: LICHTSPIEL_SERIALOSC_RECOVER=0.
+  autoRecover: process.env['LICHTSPIEL_SERIALOSC_RECOVER'] !== '0',
+  ...(process.env['LICHTSPIEL_SERIALOSC_RESTART_CMD']
+    ? { recoverCmd: process.env['LICHTSPIEL_SERIALOSC_RESTART_CMD'] }
+    : {}),
   onDeviceAttached: (d) => {
     server.ingest(wire('device.attached', d));
     server.setMonomeConnected(true);

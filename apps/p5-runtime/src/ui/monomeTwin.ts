@@ -32,13 +32,13 @@ import {
   ARC_4,
   ARC_RING_LEDS,
   DEFAULT_PARAMS,
-  DEFAULT_SETUP,
   GRID_64,
   GRID_128,
   LED_LEVEL_MAX,
   describeSetup,
 } from '@lichtspiel/schemas';
 import type { AppBus } from '../messageBus.js';
+import type { MonomeDevices } from '../monomeDevices.js';
 import {
   type PerfState,
   PERF_GRID_INTENSITY,
@@ -89,6 +89,7 @@ const RING_R = 40;
 export class MonomeTwin {
   private readonly root: HTMLElement;
   private readonly bus: AppBus;
+  private readonly devices: MonomeDevices;
   private readonly onLedFrame: ((frame: LedFramePayload) => void) | undefined;
   private setup: MonomeSetup;
 
@@ -131,12 +132,13 @@ export class MonomeTwin {
   constructor(
     root: HTMLElement,
     bus: AppBus,
-    setup: MonomeSetup = DEFAULT_SETUP,
+    devices: MonomeDevices,
     onLedFrame?: (frame: LedFramePayload) => void,
   ) {
     this.root = root;
     this.bus = bus;
-    this.setup = setup;
+    this.devices = devices;
+    this.setup = devices.active();
     this.onLedFrame = onLedFrame;
     this.buildShell();
     this.subscribe();
@@ -208,15 +210,16 @@ export class MonomeTwin {
     this.root.append(this.label, sw, this.capsEl, this.canvas, testbar, this.checklistEl, this.logEl);
   }
 
+  // The manual switch only *simulates* (no-hardware mode). Real hardware always
+  // wins; the resulting active-setup change comes back via devices.onChange →
+  // setSetup, so the twin never mutates its own setup here (no divergence).
   private setGrid(p: typeof GRID_64): void {
-    this.setup = { ...this.setup, grid: p };
-    this.bus.emit('monome.setup', this.setup);
-    this.rebuild();
+    if (this.devices.isConnected('grid')) return; // locked to real hardware
+    this.bus.emit('monome.setup', { ...this.devices.simulated(), grid: p });
   }
   private setArc(p: typeof ARC_2): void {
-    this.setup = { ...this.setup, arc: p };
-    this.bus.emit('monome.setup', this.setup);
-    this.rebuild();
+    if (this.devices.isConnected('arc')) return; // locked to real hardware
+    this.bus.emit('monome.setup', { ...this.devices.simulated(), arc: p });
   }
   private setTest(mode: TestMode): void {
     this.testMode = mode;
@@ -257,9 +260,30 @@ export class MonomeTwin {
     const logicalH = this.gridOy + gridH + (enc > 0 ? PAD + RING_R * 2 : 0) + PAD;
     this.sizeCanvas(logicalW, logicalH);
 
-    this.label.textContent = `Digital twin — ${describeSetup(this.setup)} · emulated`;
-    for (const [k, b] of Object.entries(this.gridBtns)) b.classList.toggle('active', grid?.size === k);
-    for (const [k, b] of Object.entries(this.arcBtns)) b.classList.toggle('active', arc?.size === k);
+    this.label.textContent = `Digital twin — ${describeSetup(this.setup)}`;
+    // Auto-snap the switch to the active setup; lock + grey the size buttons of
+    // a kind that's driven by real hardware (you can't simulate over hardware).
+    const gridConn = this.devices.isConnected('grid');
+    const arcConn = this.devices.isConnected('arc');
+    const style = (
+      btns: Record<string, HTMLButtonElement>,
+      activeSize: string | undefined,
+      connected: boolean,
+    ): void => {
+      for (const [k, b] of Object.entries(btns)) {
+        const isActive = activeSize === k;
+        const locked = connected && !isActive;
+        // green = real hardware of this size; blue = simulated selection; the
+        // rest dim. When the kind isn't connected at all, nothing is green and
+        // (with no sim selected) both read as greyed.
+        b.classList.toggle('connected', connected && isActive);
+        b.classList.toggle('active', !connected && isActive);
+        b.classList.toggle('disabled', locked);
+        b.disabled = locked;
+      }
+    };
+    style(this.gridBtns, grid?.size, gridConn);
+    style(this.arcBtns, arc?.size, arcConn);
     this.renderCaps();
     this.renderChecklist();
   }
@@ -276,16 +300,19 @@ export class MonomeTwin {
   private renderCaps(): void {
     const g = this.setup.grid;
     const a = this.setup.arc;
+    const tag = (kind: 'grid' | 'arc'): string =>
+      this.devices.isConnected(kind) ? '● hardware' : '○ simulated';
     const bright = g
       ? g.caps.varibright
         ? 'varibright 0–15'
         : `monobright${g.caps.globalIntensity ? ' + global 0–15' : ''} (levels logical)`
       : '';
     const gline = g
-      ? `grid: ${g.cols}×${g.rows} (${g.caps.cells}) · ${g.caps.quads} quad${g.caps.quads > 1 ? 's' : ''} · ${bright} · tilt ${g.caps.tilt ? '✓' : '✗'}`
+      ? `grid ${tag('grid')}: ${g.cols}×${g.rows} (${g.caps.cells}) · ${g.caps.quads} quad${g.caps.quads > 1 ? 's' : ''} · ${bright} · tilt ${g.caps.tilt ? '✓' : '✗'}`
       : 'grid: none';
+    const push = a ? (a.caps.push ? (a.caps.pushPerEncoder ? 'per-enc' : 'shared') : '✗') : '';
     const aline = a
-      ? `arc: ${a.caps.encoders} enc × ${a.caps.ringLeds} LED (varibright) · push ${a.caps.push ? '~' : '✗'}`
+      ? `arc ${tag('arc')}: ${a.caps.encoders} enc × ${a.caps.ringLeds} LED (varibright) · push ${push}`
       : 'arc: none';
     this.capsEl.textContent = `${gline}\n${aline}`;
   }

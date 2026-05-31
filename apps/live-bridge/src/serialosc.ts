@@ -42,12 +42,23 @@ import {
   type LedFramePayload,
   type MonomeEvent,
   ARC_RING_LEDS,
+  KNOWN_ARCS,
+  KNOWN_GRIDS,
   LED_LEVEL_MAX,
   clampLevel,
   profileFromAttached,
 } from '@lichtspiel/schemas';
+import { exec } from 'node:child_process';
+import { readdirSync } from 'node:fs';
 import { logger } from './log.js';
 import { decodeOscMessage, encodeOscMessage } from './oscCodec.js';
+
+/** Serials of monome devices we know about — used to detect a device that's
+ *  present at the OS/USB level but that serialosc has failed to enumerate. */
+const KNOWN_MONOME_SERIALS: readonly string[] = [
+  ...Object.keys(KNOWN_GRIDS),
+  ...Object.keys(KNOWN_ARCS),
+];
 
 export interface SerialOscOptions {
   /** Loopback host to bind + advertise to devices. Default 127.0.0.1. */
@@ -62,6 +73,10 @@ export interface SerialOscOptions {
   ledHz?: number;
   /** Periodic re-list interval (hot-plug backup). Default 5000 ms. */
   relistMs?: number;
+  /** Auto-restart the serialosc daemon when a known device is stuck. Default true. */
+  autoRecover?: boolean;
+  /** Command used to restart the serialosc daemon. Default Homebrew restart. */
+  recoverCmd?: string;
   onDeviceAttached: (d: DeviceAttached) => void;
   onDeviceDetached: (d: DeviceDetached) => void;
   onMonomeEvent: (e: MonomeEvent) => void;
@@ -75,6 +90,10 @@ interface KnownDevice {
   profile: GridProfile | ArcProfile;
   /** Last global intensity sent to a grid (dedup; -1 = unset). */
   lastGridIntensity: number;
+  /** Consecutive polls this device has been missing from /serialosc/list. */
+  missCount: number;
+  /** Last LED payload sent per channel (quad/ring) — to skip unchanged re-sends. */
+  lastSent: Map<string, string>;
 }
 
 /**
@@ -84,12 +103,34 @@ interface KnownDevice {
  */
 const MONOBRIGHT_ON_THRESHOLD = Math.ceil(LED_LEVEL_MAX / 2); // 8
 
+/** How long to collect /serialosc/list replies before reconciling removals. */
+const POLL_WINDOW_MS = 400;
+
+/**
+ * Consecutive missed polls before a device is detached. >1 debounces flaky
+ * hardware that bounces on/off the USB bus (e.g. a loose clone) so the twin
+ * doesn't thrash — at the cost of a slightly slower clean-unplug detect.
+ */
+const DETACH_MISSES = 2;
+
+// ── stuck-device auto-recovery ─────────────────────────────────────
+/** Reconcile cycles a known device must be present-at-USB-but-unlisted before recovering. */
+const STUCK_CYCLES = 3;
+/** Max serialosc-daemon restarts per stuck episode before asking for a manual replug. */
+const MAX_RECOVERY_ATTEMPTS = 2;
+/** Minimum gap between daemon restarts (ms). */
+const RECOVERY_COOLDOWN_MS = 20_000;
+/** Default command to restart the serialosc daemon (Homebrew on macOS). */
+const DEFAULT_RECOVER_CMD = 'brew services restart serialosc';
+
 export class SerialOsc {
   private sock: Socket | null = null;
   private readonly host: string;
   private readonly prefix: string;
   private readonly ledHz: number;
   private readonly relistMs: number;
+  private readonly autoRecover: boolean;
+  private readonly recoverCmd: string;
   private readonly opts: SerialOscOptions;
 
   /** id → device. */
@@ -100,6 +141,22 @@ export class SerialOsc {
   // ── rate-limiting state ──────────────────────────────────────────
   private tick: ReturnType<typeof setInterval> | null = null;
   private relistTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * Re-list reconciliation. serialosc's `/serialosc/remove` notifications are
+   * unreliable (one-shot, easily missed), so the periodic `/serialosc/list` is
+   * the source of truth: each poll collects the advertised ids in `pollSeen`,
+   * then `reconcile()` detaches any known device that's no longer advertised.
+   * `pollGen` ignores stale reconcile timers from overlapping polls.
+   */
+  private pollGen = 0;
+  private pollSeen = new Set<string>();
+  /** Debounce for re-listing after add/remove notifications (collapses floods). */
+  private addDebounce: ReturnType<typeof setTimeout> | null = null;
+  // stuck-device recovery state
+  private readonly stuckCycles = new Map<string, number>();
+  private recoveryAttempts = 0;
+  private lastRecoveryMs = 0;
+  private recoveryGaveUp = false;
   /** Latest LED frame awaiting flush (coalesces bursts). */
   private pendingLeds: LedFramePayload | null = null;
   /** Coalesced arc deltas, keyed `${deviceId}:${encoder}`. */
@@ -110,7 +167,11 @@ export class SerialOsc {
     this.host = opts.host ?? '127.0.0.1';
     this.prefix = opts.prefix ?? '/lichtspiel';
     this.ledHz = opts.ledHz ?? 30;
-    this.relistMs = opts.relistMs ?? 5000;
+    // Polls double as the detach mechanism + the steady-state discovery path, so
+    // keep them brisk (~1.5s); loopback list replies settle well under POLL_WINDOW_MS.
+    this.relistMs = opts.relistMs ?? 1500;
+    this.autoRecover = opts.autoRecover ?? true;
+    this.recoverCmd = opts.recoverCmd ?? DEFAULT_RECOVER_CMD;
   }
 
   start(): void {
@@ -124,7 +185,7 @@ export class SerialOsc {
       logger.info(
         `serialosc listening udp ${this.host}:${this.opts.appPort} (prefix ${this.prefix}) · daemon :${this.opts.serialoscPort}`,
       );
-      this.discover();
+      this.reconcileTick(); // first poll now; steady cadence below
     });
     try {
       sock.bind(this.opts.appPort, this.host);
@@ -137,13 +198,16 @@ export class SerialOsc {
     // One shared ~30 Hz scheduler drives LED flush + arc-delta drain, so the
     // event loop is never blocked and neither stream can flood downstream.
     this.tick = setInterval(() => this.onTick(), Math.max(1, Math.round(1000 / this.ledHz)));
-    // Periodic re-list as a hot-plug backup (notify is one-shot per arm).
-    this.relistTimer = setInterval(() => this.discover(), this.relistMs);
+    // Steady reconcile cycle: re-list + detach anything no longer advertised.
+    this.relistTimer = setInterval(() => this.reconcileTick(), this.relistMs);
   }
 
   stop(): void {
     if (this.tick) clearInterval(this.tick);
     if (this.relistTimer) clearInterval(this.relistTimer);
+    if (this.addDebounce) clearTimeout(this.addDebounce);
+    this.addDebounce = null;
+    this.pollGen++; // invalidate any pending reconcile
     this.tick = null;
     this.relistTimer = null;
     // Best-effort: leave the hardware dark before closing.
@@ -178,9 +242,107 @@ export class SerialOsc {
 
   // ── discovery ──────────────────────────────────────────────────────
 
+  /**
+   * Poll serialosc for the current device list + (re-)arm the one-shot notify so
+   * we hear about future plug/unplug. Notify is safe now that LED output is
+   * diffed (so a device no longer disconnects under a 30 Hz flush) and that we
+   * react to add/remove with a DEBOUNCED single re-list (not the old 5× burst),
+   * so even residual flicker can't storm. Detach is still owned by reconcileTick.
+   */
   private discover(): void {
     this.send(this.opts.serialoscPort, '/serialosc/list', [this.host, this.opts.appPort]);
     this.send(this.opts.serialoscPort, '/serialosc/notify', [this.host, this.opts.appPort]);
+  }
+
+  /** Re-list soon, collapsing a burst of add/remove notifications into one poll. */
+  private debouncedDiscover(): void {
+    if (this.addDebounce) clearTimeout(this.addDebounce);
+    this.addDebounce = setTimeout(() => {
+      this.addDebounce = null;
+      if (this.sock) this.discover();
+    }, 200);
+  }
+
+  /**
+   * One reconcile cycle (steady timer): open a fresh seen-window, re-list, then
+   * detach any known device that didn't show up. Decoupled from the discovery
+   * burst so rapid burst polls never delay a removal (the gen guard is only
+   * bumped here, and relistMs > POLL_WINDOW_MS so windows never overlap).
+   */
+  private reconcileTick(): void {
+    const gen = ++this.pollGen;
+    this.pollSeen = new Set();
+    this.discover();
+    setTimeout(() => {
+      if (this.sock && gen === this.pollGen) {
+        this.reconcile();
+        this.checkStuck();
+      }
+    }, POLL_WINDOW_MS);
+  }
+
+  /**
+   * Recover a known monome that's present at the OS/USB level (its tty exists)
+   * but that serialosc has failed to enumerate — a daemon-side glitch that hits
+   * the user's Arc 4 FTDI clone on re-plug. Restarts the serialosc daemon
+   * (bounded + rate-limited); if restarts don't resolve it, asks for a replug.
+   */
+  private checkStuck(): void {
+    if (!this.autoRecover) return;
+    let ttys: string[];
+    try {
+      ttys = readdirSync('/dev').filter((n) => n.startsWith('tty.usb'));
+    } catch {
+      return; // not macOS / can't read /dev → skip
+    }
+    const stuck = KNOWN_MONOME_SERIALS.filter(
+      (serial) => ttys.some((t) => t.includes(serial)) && !this.devices.has(serial),
+    );
+    if (stuck.length === 0) {
+      // episode over — every connected known device is enumerated again
+      this.stuckCycles.clear();
+      this.recoveryAttempts = 0;
+      this.recoveryGaveUp = false;
+      return;
+    }
+    for (const serial of KNOWN_MONOME_SERIALS) {
+      if (stuck.includes(serial)) this.stuckCycles.set(serial, (this.stuckCycles.get(serial) ?? 0) + 1);
+      else this.stuckCycles.delete(serial);
+    }
+    if (!stuck.some((s) => (this.stuckCycles.get(s) ?? 0) >= STUCK_CYCLES)) return;
+    if (this.recoveryAttempts >= MAX_RECOVERY_ATTEMPTS) {
+      if (!this.recoveryGaveUp) {
+        this.recoveryGaveUp = true;
+        logger.warn(
+          'monome present at USB but serialosc will not enumerate it — please physically replug',
+          { summary: stuck.join(',') },
+        );
+      }
+      return;
+    }
+    if (Date.now() - this.lastRecoveryMs < RECOVERY_COOLDOWN_MS) return;
+    this.recoveryAttempts += 1;
+    this.lastRecoveryMs = Date.now();
+    logger.warn('monome stuck — restarting serialosc daemon to recover', {
+      summary: `${stuck.join(',')} (attempt ${this.recoveryAttempts}/${MAX_RECOVERY_ATTEMPTS})`,
+    });
+    exec(this.recoverCmd, (err) => {
+      if (err) logger.warn('serialosc daemon restart failed', { error: String(err) });
+    });
+  }
+
+  /**
+   * Detach devices the latest /serialosc/list no longer advertises — but only
+   * after DETACH_MISSES consecutive missed polls, so a flaky device that bounces
+   * on/off the bus doesn't thrash the twin. A still-listed device resets its count.
+   */
+  private reconcile(): void {
+    for (const id of [...this.devices.keys()]) {
+      const dev = this.devices.get(id);
+      if (!dev) continue;
+      if (this.pollSeen.has(id)) dev.missCount = 0;
+      else if (++dev.missCount >= DETACH_MISSES) this.onDeviceRemoved(id);
+    }
   }
 
   private handleInbound(address: string, args: Array<string | number>, rinfo: RemoteInfo): void {
@@ -194,14 +356,11 @@ export class SerialOsc {
       this.onDeviceAdvertised(String(args[0]), String(args[1]), Number(args[2]));
       return;
     }
-    if (address === '/serialosc/add') {
-      // one-shot notify fired (id only). Re-arm + re-list to learn type/port.
-      this.discover();
-      return;
-    }
-    if (address === '/serialosc/remove') {
-      this.onDeviceRemoved(String(args[0]));
-      this.discover(); // re-arm the one-shot notify
+    // A device was plugged/unplugged → re-list soon (debounced, so a flaky
+    // device's add/remove flood collapses to a single poll, never a storm).
+    // Detach is owned by the debounced reconcileTick; this is the fast-detect path.
+    if (address === '/serialosc/add' || address === '/serialosc/remove') {
+      this.debouncedDiscover();
       return;
     }
 
@@ -242,10 +401,14 @@ export class SerialOsc {
 
   private onDeviceAdvertised(id: string, type: string, port: number): void {
     if (!id || !Number.isFinite(port)) return;
+    this.pollSeen.add(id); // mark seen for reconcile (BEFORE the dedup return)
     const kind: 'grid' | 'arc' = type.toLowerCase().includes('arc') ? 'arc' : 'grid';
 
     const existing = this.devices.get(id);
-    if (existing && existing.port === port) return; // dedup: already known (periodic re-list)
+    if (existing && existing.port === port) {
+      existing.missCount = 0; // re-advertised → reset the miss counter
+      return; // dedup: already known (steady re-list)
+    }
 
     // Resolve a full profile from the serial (falls back to dims/type for unknowns).
     const encodersFromType = kind === 'arc' ? parseTrailingInt(type) : undefined;
@@ -257,7 +420,15 @@ export class SerialOsc {
     });
 
     if (existing) this.portToId.delete(existing.port); // port changed (daemon restart)
-    const dev: KnownDevice = { id, kind, port, profile, lastGridIntensity: -1 };
+    const dev: KnownDevice = {
+      id,
+      kind,
+      port,
+      profile,
+      lastGridIntensity: -1,
+      missCount: 0,
+      lastSent: new Map(),
+    };
     this.devices.set(id, dev);
     this.portToId.set(port, id);
 
@@ -331,7 +502,7 @@ export class SerialOsc {
   // ── LED output (caps-aware) ────────────────────────────────────────
 
   private flushFrame(frame: LedFramePayload): void {
-    const grid = this.firstDevice('grid');
+    const grid = this.activeDevice('grid');
     if (grid && grid.profile.kind === 'grid') {
       // Global dimmer (monobright grids' only brightness control) — deduped.
       if (frame.gridIntensity != null && grid.profile.caps.globalIntensity) {
@@ -344,7 +515,7 @@ export class SerialOsc {
       if (frame.grid) this.flushGrid(grid, frame.grid);
     }
     if (frame.arc) {
-      const arc = this.firstDevice('arc');
+      const arc = this.activeDevice('arc');
       if (arc && arc.profile.kind === 'arc') this.flushArc(arc, frame.arc);
     }
   }
@@ -364,7 +535,7 @@ export class SerialOsc {
           for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) levels.push(clampLevel(grid[yOff + r]?.[xOff + c] ?? 0));
           }
-          this.send(dev.port, `${this.prefix}/grid/led/level/map`, [xOff, yOff, ...levels]);
+          this.sendIfChanged(dev, `g:${bx}:${by}`, `${this.prefix}/grid/led/level/map`, [xOff, yOff, ...levels]);
         } else {
           // Monobright: 8 row bitmasks (bit c = column xOff+c), binarized.
           const rowMasks: number[] = [];
@@ -375,7 +546,7 @@ export class SerialOsc {
             }
             rowMasks.push(mask);
           }
-          this.send(dev.port, `${this.prefix}/grid/led/map`, [xOff, yOff, ...rowMasks]);
+          this.sendIfChanged(dev, `g:${bx}:${by}`, `${this.prefix}/grid/led/map`, [xOff, yOff, ...rowMasks]);
         }
       }
     }
@@ -389,8 +560,21 @@ export class SerialOsc {
       if (!ring) continue;
       const levels: number[] = [];
       for (let i = 0; i < ARC_RING_LEDS; i++) levels.push(clampLevel(ring[i] ?? 0));
-      this.send(dev.port, `${this.prefix}/ring/map`, [e, ...levels]);
+      this.sendIfChanged(dev, `r:${e}`, `${this.prefix}/ring/map`, [e, ...levels]);
     }
+  }
+
+  /**
+   * Send an LED message only if it differs from the last one on this channel
+   * (a grid quad or an arc ring). The twin emits a full frame at ~30 Hz, so
+   * without this we'd hammer the device with identical frames — which is what
+   * overwhelmed the Arc 4 clone's serial link (windchime only flushed on change).
+   */
+  private sendIfChanged(dev: KnownDevice, key: string, address: string, args: number[]): void {
+    const sig = args.join(',');
+    if (dev.lastSent.get(key) === sig) return;
+    dev.lastSent.set(key, sig);
+    this.send(dev.port, address, args);
   }
 
   /** Clear a device's LEDs (used on stop). */
@@ -406,9 +590,11 @@ export class SerialOsc {
 
   // ── helpers ────────────────────────────────────────────────────────
 
-  private firstDevice(kind: 'grid' | 'arc'): KnownDevice | null {
-    for (const dev of this.devices.values()) if (dev.kind === kind) return dev;
-    return null;
+  /** The device of this kind to drive — the most recently attached (newest wins). */
+  private activeDevice(kind: 'grid' | 'arc'): KnownDevice | null {
+    let found: KnownDevice | null = null;
+    for (const dev of this.devices.values()) if (dev.kind === kind) found = dev;
+    return found;
   }
 
   private send(port: number, address: string, args: Array<string | number>): void {
