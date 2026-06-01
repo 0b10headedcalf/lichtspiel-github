@@ -101,16 +101,20 @@ export const patternGridWorld: VisualTemplate = {
   gestural: {
     name: 'Neural Grid + Hypnotic Border',
     summary:
-      'A 3D cube grid — un-pressed cells flicker; pressing a cell cycles its brightness 0→15 (and picks its lit depth layer). Arc encoders set the alpha / brightness / opacity curves; their presses re-roll the resting / active / connection colours + toggle a pulsing border. On an Arc 2 the encoders PAGE: page 1 = resting + active alpha, page 2 = background + connection — press both encoders together to flip the page.',
+      'A 3D cube grid — un-pressed cells flicker; pressing a cell cycles its brightness 0→15 (and picks its lit depth layer). The arc carries 8 controls across 4 PAGES (on an Arc 2, press both encoders together to advance a page): p1 neuron alpha, p2 background + border, p3 connections, p4 motion + life. Each encoder has a turn (a value) + a press (an action).',
     grid: [
       { area: 'any cell', action: 'press', effect: 'cycle that cell\'s brightness 0→15 + stop its flicker' },
       { area: 'un-pressed cells', action: 'idle', effect: 'random brightness flicker (speed = flicker variant)' },
     ],
     arc: [
-      { area: 'enc 0', action: 'turn / press', effect: 'resting-cube alpha · press re-rolls the resting colour' },
-      { area: 'enc 1', action: 'turn / press', effect: 'active-cube alpha · press re-rolls the active colour' },
-      { area: 'enc 2', action: 'turn / press', effect: 'background brightness · press randomises bg + toggles the border' },
-      { area: 'enc 3', action: 'turn / press', effect: 'connection-line opacity · press re-rolls the connection colour' },
+      { area: 'page 1 · enc 0', action: 'turn / press', effect: 'resting-cube alpha · re-roll the resting colour' },
+      { area: 'page 1 · enc 1', action: 'turn / press', effect: 'active-cube alpha · re-roll the active colour' },
+      { area: 'page 2 · enc 0', action: 'turn / press', effect: 'background brightness · randomise the bg colour' },
+      { area: 'page 2 · enc 1', action: 'turn / press', effect: 'border thickness · cycle the border shape' },
+      { area: 'page 3 · enc 0', action: 'turn / press', effect: 'connection opacity · re-roll the connection colour' },
+      { area: 'page 3 · enc 1', action: 'turn / press', effect: 'connection density · clear all connections' },
+      { area: 'page 4 · enc 0', action: 'turn / press', effect: 'field rotation speed · reset the rotation' },
+      { area: 'page 4 · enc 1', action: 'turn / press', effect: 'connection lifetime · spawn a connection burst' },
     ],
   },
   variants,
@@ -131,17 +135,25 @@ export const patternGridWorld: VisualTemplate = {
       flickerDensity: 0.4,
       rng: () => ctx.rng.random(),
     });
-    // 4 DISTINCT controls — on an Arc 2 they PAGE (press both encoders to flip):
-    // page 1 = resting + active alpha (presses re-roll those colours), page 2 = bg
-    // brightness/border + connection opacity/colour. Each encoder drives ONE distinct
-    // thing per page (no averaging — fixes "enc 1 does nothing on some variants").
+    // 8 controls across 4 PAGES (on an Arc 2, chord both encoders to advance). Each
+    // page gives the two encoders a distinct TURN + PRESS, mined from the original v11
+    // parameter space: p1 neuron alpha · p2 background + border · p3 connections ·
+    // p4 motion + life. (On an Arc 4 → 2 pages of 4 encoders.)
     const arc: ArcMacros = createArcMacros({
       fold: 'page',
       encoders: [
+        // ── page 1 — neuron alpha ──
         { name: 'restAlpha', label: 'resting-cube alpha', pressLabel: 're-roll the resting colour', initial: 0.5, led: 'fillNotched', onPress: () => (restingRgb = gridPalette(paletteMode, ctx.rng).resting) },
         { name: 'actAlpha', label: 'active-cube alpha', pressLabel: 're-roll the active colour', initial: 0.7, led: 'fillNotched', onPress: () => (activeRgb = gridPalette(paletteMode, ctx.rng).active) },
-        { name: 'bg', label: 'background brightness', pressLabel: 'randomise bg + toggle the border', initial: 0.5, led: 'fillNotched', onPress: () => toggleBorder() },
-        { name: 'conn', label: 'connection-line opacity', pressLabel: 're-roll the connection colour', initial: 0.6, led: 'fillNotched', onPress: () => (connRgb = gridPalette(paletteMode, ctx.rng).active) },
+        // ── page 2 — background + border ──
+        { name: 'bg', label: 'background brightness', pressLabel: 'randomise the background colour', initial: 0.5, led: 'fillNotched', onPress: () => randomiseBg() },
+        { name: 'border', label: 'border thickness', pressLabel: 'cycle border shape (off→box→sphere→ellipsoid→pyramid)', initial: 0.3, led: 'fillNotched', onPress: () => cycleBorder() },
+        // ── page 3 — connections ──
+        { name: 'conn', label: 'connection opacity', pressLabel: 're-roll the connection colour', initial: 0.6, led: 'fillNotched', onPress: () => (connRgb = gridPalette(paletteMode, ctx.rng).active) },
+        { name: 'connDensity', label: 'connection density', pressLabel: 'clear all connections', initial: 0.5, led: 'fillNotched', onPress: () => (connections.length = 0) },
+        // ── page 4 — motion + life ──
+        { name: 'spin', label: 'field rotation speed', pressLabel: 'reset the rotation', initial: 0.5, led: 'fillNotched', onPress: () => (spinAngle = 0) },
+        { name: 'life', label: 'connection lifetime', pressLabel: 'spawn a connection burst', initial: 0.5, led: 'fillNotched', onPress: () => spawnConnectionBurst() },
       ],
     });
     const idioms: ComposedIdiom = composeIdioms([paint, arc]);
@@ -152,22 +164,20 @@ export const patternGridWorld: VisualTemplate = {
     let activeRgb: Rgb = base.active;
     let connRgb: Rgb = base.active; // connection-line colour (enc 'conn' press re-rolls)
     let bgBase: Rgb = [0, 0, 0];
-    let borderOn = false;
-    let borderShape = 0;
-    let borderWeight = 8;
+    let borderState = 0; // 0 = off, 1..4 = box / sphere / ellipsoid / pyramid (page 4 cycles it)
     let borderProgress = 0;
+    let spinAngle = 0; // arc-driven field rotation (page 4 'spin')
     const connections: Connection[] = [];
     let elapsed = 0;
     let cur: VisualParamVector = ctx.initialParams;
+    const MAX_SPIN = 1.6; // rad/s at a fully-turned 'spin' encoder
 
-    function toggleBorder(): void {
+    function randomiseBg(): void {
       bgBase = [ctx.rng.int(40), ctx.rng.int(40), ctx.rng.int(48)];
-      borderOn = !borderOn;
-      if (borderOn) {
-        borderProgress = 0;
-        borderShape = ctx.rng.int(4);
-        borderWeight = ctx.rng.range(4, 28);
-      }
+    }
+    function cycleBorder(): void {
+      borderState = (borderState + 1) % 5; // off → box → sphere → ellipsoid → pyramid → off
+      if (borderState === 1) borderProgress = 0;
     }
 
     const cellPos = (col: number, row: number, lvl: number, cols: number, rows: number): [number, number, number] => {
@@ -180,6 +190,22 @@ export const patternGridWorld: VisualTemplate = {
         lvl * (CUBE + GAP) - gd / 2 + CUBE / 2,
       ];
     };
+
+    /** A random neuron's world position — the per-frame spawn + the press burst share it. */
+    function pickNeuron(cols: number, rows: number): [number, number, number] {
+      const totalN = rows * cols * depth;
+      const idx = ctx.rng.int(Math.max(1, totalN));
+      const r = Math.floor(idx / (cols * depth));
+      const rem = idx - r * cols * depth;
+      return cellPos(Math.floor(rem / depth), Math.min(rows - 1, r), rem % depth, cols, rows);
+    }
+    function spawnConnectionBurst(): void {
+      const cells = paint.values().cells;
+      const rows = cells.length;
+      const cols = cells[0]?.length ?? 0;
+      if (rows === 0 || cols === 0) return;
+      for (let i = 0; i < 24; i++) connections.push({ a: pickNeuron(cols, rows), b: pickNeuron(cols, rows), born: elapsed });
+    }
 
     return {
       setup(p): void {
@@ -211,7 +237,14 @@ export const patternGridWorld: VisualTemplate = {
         const restA = Math.floor(lerp(20, 200, av.restAlpha ?? 0.5));
         const actA = Math.floor(lerp(120, 255, av.actAlpha ?? 0.7));
         const bgB = lerp(0.2, 1, av.bg ?? 0.5);
+        const borderWeight = lerp(2, 40, av.border ?? 0.3); // page 2 'border' turn
         const connOpacity = Math.floor(lerp(0, 255, av.conn ?? 0.6));
+        const connDensityMul = lerp(0, 2.5, av.connDensity ?? 0.5); // page 3 'connDensity' turn
+        const connLifeSec = lerp(1, 10, av.life ?? 0.5); // page 4 'life' turn
+        const borderOn = borderState > 0;
+        const borderShape = borderState - 1;
+        // page 4 'spin' — a signed rotation-speed knob (0.5 = still); accumulate the angle.
+        spinAngle += ((av.spin ?? 0.5) - 0.5) * 2 * MAX_SPIN * dt;
 
         p.background(bgBase[0] * bgB, bgBase[1] * bgB, bgBase[2] * bgB);
 
@@ -241,6 +274,7 @@ export const patternGridWorld: VisualTemplate = {
             p.rotateX(Math.PI / 6);
             p.rotateY(Math.PI / 4);
         }
+        p.rotateY(spinAngle); // arc 'spin' — manual field rotation on top of the variant
 
         // cube field — brightness picks the lit depth layer
         for (let row = 0; row < rows; row++) {
@@ -273,23 +307,17 @@ export const patternGridWorld: VisualTemplate = {
           }
         }
 
-        // connection lines — sample pairs, fade over 5s
-        const total = rows * cols * depth;
+        // connection lines — sample pairs (page-3 'connDensity' scales the spawn rate),
+        // fade over the page-4 'life' time.
         for (let s = 0; s < connRate.samples; s++) {
-          if (ctx.rng.random() < connRate.prob * (0.4 + cur.density)) {
-            const pick = (): [number, number, number] => {
-              const idx = ctx.rng.int(Math.max(1, total));
-              const r = Math.floor(idx / (cols * depth));
-              const rem = idx - r * cols * depth;
-              return cellPos(Math.floor(rem / depth), Math.min(rows - 1, r), rem % depth, cols, rows);
-            };
-            connections.push({ a: pick(), b: pick(), born: elapsed });
+          if (ctx.rng.random() < connRate.prob * (0.4 + cur.density) * connDensityMul) {
+            connections.push({ a: pickNeuron(cols, rows), b: pickNeuron(cols, rows), born: elapsed });
           }
         }
         p.strokeWeight(2);
         for (let i = connections.length - 1; i >= 0; i--) {
           const conn = connections[i];
-          if (!conn || elapsed - conn.born > 5) {
+          if (!conn || elapsed - conn.born > connLifeSec) {
             connections.splice(i, 1);
             continue;
           }
