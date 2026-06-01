@@ -25,6 +25,24 @@ export interface HardwareTarget {
   arc?: '2' | '4' | 'any';
 }
 
+/**
+ * A gestural dictionary — the human-readable control map for a template,
+ * surfaced in the on-screen gestural panel so a performer knows what every
+ * grid/arc gesture does. Adapted from the windchime sketch-core type; `area`
+ * names the controller region, `action` the physical verb, `effect` what it does.
+ */
+export interface GesturalEntry {
+  area: string;
+  action: string;
+  effect: string;
+}
+export interface GesturalDictionary {
+  name: string;
+  summary?: string;
+  grid: GesturalEntry[];
+  arc: GesturalEntry[];
+}
+
 export interface VisualTemplateMeta {
   id: string;
   name: string;
@@ -43,6 +61,8 @@ export interface VisualTemplateMeta {
   hardwareTarget?: HardwareTarget;
   /** Names of the monome idiom(s) this template drives (faderBank, stepSequencer, …). */
   idioms?: string[];
+  /** The control map shown in the gestural panel (what each grid/arc gesture does). */
+  gestural?: GesturalDictionary;
 }
 
 /** A descriptor entry used by metadata retrieval (Phase 5). */

@@ -36,6 +36,29 @@
         "arc": { "enum": ["2", "4", "any"] }
       }
     },
-    "idioms": { "type": "array", "items": { "type": "string" } }
+    "idioms": { "type": "array", "items": { "type": "string" } },
+    "gestural": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "grid", "arc"],
+      "properties": {
+        "name": { "type": "string" },
+        "summary": { "type": "string" },
+        "grid": { "type": "array", "items": { "$ref": "#/$defs/gesturalEntry" } },
+        "arc": { "type": "array", "items": { "$ref": "#/$defs/gesturalEntry" } }
+      }
+    }
+  },
+  "$defs": {
+    "gesturalEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["area", "action", "effect"],
+      "properties": {
+        "area": { "type": "string" },
+        "action": { "type": "string" },
+        "effect": { "type": "string" }
+      }
+    }
   }
 }

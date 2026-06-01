@@ -24,8 +24,10 @@ import { installKeyboard } from './keyboard.js';
 import { createMonomeMapping } from './monomeMapping.js';
 import { DebugPanel } from './ui/debugPanel.js';
 import { MonomeTwin } from './ui/monomeTwin.js';
+import { GesturalPanel } from './ui/gesturalPanel.js';
 import { BridgeClient } from './transport/bridgeClient.js';
 import { randomizeParams, mutateParams } from './mutations/paramMutation.js';
+import { createVariantBrowser } from './mutations/variantBrowser.js';
 import { createRng, randomSeed } from './seededRng.js';
 import type { VisualTemplate } from './visualTemplate.js';
 
@@ -94,18 +96,35 @@ const host = new SketchHost({
 
 let locked = false;
 
-/** Switch scenes. Manual selects always win; bridge/retrieval selects respect lock. */
-function selectScene(template: VisualTemplate, manual: boolean): void {
-  if (!manual && locked) return;
-  const prev = host.current();
-  // Preserve performer-intent params across scene switches.
-  const keep: Partial<VisualParamVector> = prev
+// The gestural panel (control map + variant readout, toggled with `h`) and the
+// variant browser (new / canonical / step through each template's structural
+// space, live). The browser is the single template-mount authority: it re-mounts
+// at the active variant + refreshes the panel.
+const panel = new GesturalPanel();
+
+/** Performer-intent params preserved across a scene/variant re-mount. */
+function keepParams(): Partial<VisualParamVector> {
+  return host.current()
     ? {
         semanticDistance: host.targetParams().semanticDistance,
         mutationAmount: host.targetParams().mutationAmount,
       }
     : {};
-  host.mount(template, { params: keep });
+}
+
+const variants = createVariantBrowser({
+  apply: (template, seed, config) => {
+    host.mount(template, { seed, config, params: keepParams() });
+    panel.setDictionary(template.gestural);
+  },
+  onChange: (info) => panel.setVariant(info),
+  divergence: 0.6,
+});
+
+/** Switch scenes. Manual selects always win; bridge/retrieval selects respect lock. */
+function selectScene(template: VisualTemplate, manual: boolean): void {
+  if (!manual && locked) return;
+  variants.show(template); // mount at the family's current variant + refresh the panel
 }
 
 // ── Bus wiring ───────────────────────────────────────────────────────
@@ -198,21 +217,10 @@ function doSurprise(): void {
   host.setTargetParams(mutateParams(host.targetParams(), rng, { amount: 0.5 }));
 }
 
-/** Re-mount the current scene as a new STRUCTURAL variant (same template, new seed). */
+/** New random structural variant of the current scene (via the variant browser). */
 function doVariant(): void {
   const t = host.current();
-  if (!t) return;
-  const seed = randomSeed();
-  const rng = createRng(seed);
-  // The live 'mutation amount' rides the structural divergence; always do
-  // something noticeable on an explicit 'v'.
-  const divergence = Math.max(0.3, host.targetParams().mutationAmount);
-  const config = t.variants?.generate(rng, seed, divergence) ?? {};
-  const keep: Partial<VisualParamVector> = {
-    semanticDistance: host.targetParams().semanticDistance,
-    mutationAmount: host.targetParams().mutationAmount,
-  };
-  host.mount(t, { seed, config, params: keep });
+  if (t) variants.newVariant(t);
 }
 
 installKeyboard({
@@ -236,8 +244,17 @@ installKeyboard({
   randomize: doRandomize,
   surprise: doSurprise,
   variant: doVariant,
+  canonical: () => {
+    const t = host.current();
+    if (t) variants.canonical(t);
+  },
+  stepVariant: (dir) => {
+    const t = host.current();
+    if (t) variants.step(t, dir);
+  },
   toggleDebug: () => debug.toggle(),
   toggleEmulator: () => twin.toggle(),
+  toggleGestural: () => panel.toggle(),
 });
 
 // ── Optional bridge connection ───────────────────────────────────────
@@ -246,8 +263,9 @@ bridge.connect();
 
 // ── Boot ─────────────────────────────────────────────────────────────
 const first = registry.at(0);
-if (first) host.mount(first);
+if (first) selectScene(first, true); // mount via the browser so the panel initializes
 console.info(
   `[lichtspiel] p5 runtime up — ${registry.size} templates. ` +
-    `Press 'd' for HUD, 'g' for the monome digital twin. Bridge: ${wsUrl} (optional).`,
+    `Press 'd' HUD · 'g' monome twin · 'h' gestures · 'v/c/,/.' variants. ` +
+    `Bridge: ${wsUrl} (optional).`,
 );

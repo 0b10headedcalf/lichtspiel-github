@@ -14,10 +14,16 @@ export interface KeyboardHandlers {
   toggleLock(): void;
   randomize(): void;
   surprise(): void;
-  /** Re-mount the current scene as a new structural variant. */
+  /** New random structural variant of the current scene. */
   variant(): void;
+  /** Reset the current scene to its canonical (signature) look. */
+  canonical(): void;
+  /** Step the current scene's variant cursor by ±1 (deterministic). */
+  stepVariant(dir: 1 | -1): void;
   toggleDebug(): void;
   toggleEmulator(): void;
+  /** Toggle the gestural control-map panel. */
+  toggleGestural(): void;
 }
 
 const STEP = 0.06;
@@ -71,6 +77,18 @@ export function installKeyboard(h: KeyboardHandlers): () => void {
       case 'KeyV':
         h.variant();
         break;
+      case 'KeyC':
+        h.canonical();
+        break;
+      case 'Comma':
+        h.stepVariant(-1);
+        break;
+      case 'Period':
+        h.stepVariant(1);
+        break;
+      case 'KeyH':
+        h.toggleGestural();
+        break;
       case 'KeyN':
         h.next();
         break;
@@ -97,6 +115,7 @@ export const KEYBOARD_HELP = [
   '1–5 select scene · n/p next/prev',
   '← → semantic distance · ↑ ↓ mutation',
   '[ ] density · - = motion',
-  'space lock · r randomize · s surprise · v variant',
-  'd debug · g monome twin',
+  'space lock · r randomize · s surprise',
+  'v new variant · c canonical · , . step variant',
+  'd debug · g monome twin · h gestures',
 ].join('\n');

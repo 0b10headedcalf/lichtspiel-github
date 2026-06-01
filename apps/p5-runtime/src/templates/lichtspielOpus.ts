@@ -106,6 +106,24 @@ export const lichtspielOpus: VisualTemplate = {
   sourceLineage: 'Lichtspiel_v3.pde (hand-ported, concept-adapted P3D→P2D)',
   hardwareTarget: { grid: '64', arc: '2' },
   idioms: ['faderBank', 'arcMacros'],
+  gestural: {
+    name: 'Ruttmann Film Faders + Arc',
+    summary:
+      'Eight grid column-faders sculpt the morphing tunnel; the arc twists the camera + drives the aperture. The palette column and the arc presses burst + advance.',
+    grid: [
+      { area: 'cols 0–5', action: 'press a row', effect: 'fader: speed · radius · undulation · lobes · inner-morph density · rect-form density' },
+      { area: 'col 6', action: 'press a row', effect: 'select palette (one row each) + spawn a 2D rect burst' },
+      { area: 'col 7', action: 'press a row', effect: 'grain / vignette damage; bottom row cycles the grain type' },
+      { area: 'cols 8–15 (Grid 128)', action: 'press', effect: 'select scene' },
+    ],
+    arc: [
+      { area: 'enc 0', action: 'turn', effect: 'global tunnel twist / camera orbit' },
+      { area: 'enc 0', action: 'press', effect: 'toggle the continuous 3D bulge field' },
+      { area: 'enc 1', action: 'turn', effect: 'aperture / iris pressure' },
+      { area: 'enc 1', action: 'press', effect: 'advance palette + spawn a geometric burst' },
+      { area: 'enc 2–3 (Arc 4)', action: 'turn', effect: 'extra orbit + grain modulation' },
+    ],
+  },
   variants,
 
   create(ctx: MountContext) {
