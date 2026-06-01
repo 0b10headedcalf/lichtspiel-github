@@ -197,8 +197,17 @@ Decisions: adapt windchime p5 + variants · hybrid control (uniform fader baseli
   (`fold:'page'` — chord flips, for itoBox's distinct axes), **`fillNotched`** rings
   (dim notches, not blank-until-max), and a **repositioned + hardware-adaptive
   gestural panel** (left gutter; live `describe(profile)` map showing the connected
-  device + coupling). 78 idiom-smoke checks. **Open:** Stage 2 = faithful WEBGL hero
-  re-port; then the user's Grid-64/Arc-2 checkpoint + Grid-128/Arc-4 hot-swap pass.
+  device + coupling). Later: a live encoder-PAGE indicator + patternGridWorld expanded
+  to 8 controls across 4 pages; page-mode presses fire on-press (Arc 2 reliability).
+  81 idiom-smoke checks.
+- ✅ **Stage 2 — faithful WEBGL hero re-port** (`lichtspielOpus`, p2d→webgl): restored
+  the true 3D the P2D version flattened — the morphing tube (filled shells + contour
+  rings + twisting strands + lobe undulation + noise + bulge field), interior noisy-
+  sphere morphs, and volumetric 3D grain, inside the 2D film language (backplate, rect
+  forms, bursts, film gate + sprocket holes + 4 grain types) layered by depth-test
+  toggling. 8 faders + arc twist/aperture + 8 palettes + variants kept. Browser-verified
+  at 60fps; variants re-roll palette/tunnel/forms. **Open:** the user's Grid-64/Arc-2
+  hardware pass (hero + patternGridWorld 4-page) + the Grid-128/Arc-4 hot-swap pass.
 
 ## Phase 5 — Metadata retrieval 🟡 (head start shipped)
 
