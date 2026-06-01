@@ -78,11 +78,16 @@ export function cellLevel(level: number): number {
 }
 
 // ── arc ring policies ─────────────────────────────────────────────
-export type ArcLedPolicy = 'fill' | 'comet' | 'gauge' | 'marker' | 'segments' | 'playhead';
+export type ArcLedPolicy = 'fill' | 'comet' | 'gauge' | 'marker' | 'segments' | 'playhead' | 'inverse';
 
 /** Solid fill from 12 o'clock up to the value (windchime `fill`). */
 export function fillRingLevel(i: number, value01: number, ringLeds: number): number {
   return i < fillCount(value01, ringLeds) ? LED_LEVEL_MAX : 0;
+}
+
+/** Inverse fill — lit where `fill` isn't (windchime `inverse`). */
+export function inverseRingLevel(i: number, value01: number, ringLeds: number): number {
+  return i >= fillCount(value01, ringLeds) ? 9 : 0;
 }
 
 /**
@@ -152,6 +157,8 @@ export function arcRingLevel(
       return segmentsRingLevel(i, value01, ringLeds);
     case 'playhead':
       return playheadRingLevel(i, value01, ringLeds);
+    case 'inverse':
+      return inverseRingLevel(i, value01, ringLeds);
     case 'comet':
     default:
       return cometRingLevel(i, value01, ringLeds);

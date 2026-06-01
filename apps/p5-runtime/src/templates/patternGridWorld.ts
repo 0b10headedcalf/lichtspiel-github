@@ -1,63 +1,83 @@
 /**
- * patternGridWorld — adapted (not forked) from windchime-animation
- * packages/sketch-families/src/patternGridWorldV11 (a port of PatternGridWorld
- * v11). A 3D grid of cubes whose per-cell brightness picks the lit depth layer;
- * un-pressed cells flicker; random connection lines + an optional pulsing border.
+ * patternGridWorld — faithful port (not forked) of windchime-animation
+ * packages/sketch-families/src/patternGridWorldV11 (a port of
+ * PatternGridWorld_v11.pde). A 3D grid of cubes (rows × cols × depth) where each
+ * cell's brightness picks its lit depth layer; un-pressed cells flicker; random
+ * connection lines fade across the field; a pulsing hypnotic border (box /
+ * sphere / ellipsoid / pyramid) can surround it. The full variant space is
+ * preserved: 6 palettes (resting/active pairs) · 4 connection densities · depth
+ * 4/8/12 · 4 rotations · 5 flicker speeds · 4 cube styles.
  *
- * Lichtspiel rewiring: the per-sketch grid handling is replaced by the Part-2
- * `cellPaint` idiom (press cycles a cell 0→15 + freezes it; idle flicker via a
- * seeded RNG), and the arc by `arcMacros` (enc0 resting alpha, enc1 active alpha,
- * enc2 background, enc3 connection opacity; press randomises colours / toggles
- * the border). cellPaint reshapes on hot-swap, so the cube field is 8×16 on a
- * Grid 128 and clamps cleanly to 8×8 on a Grid 64 — the varibright/monobright
- * showcase. WEBGL, browser-resilient.
+ * Lichtspiel rewiring: windchime's per-cell grid handling → the `cellPaint`
+ * idiom (press cycles 0→15 + freezes; seeded idle flicker), so the field
+ * reshapes 8×16 → 8×8 across a hot-swap; the arc → `arcMacros` (resting/active
+ * alpha, bg brightness, connection opacity; press randomises colours / toggles
+ * the border). WEBGL.
  */
 
-import type p5 from 'p5';
 import { type VisualParamVector, clamp01, lerp } from '@lichtspiel/schemas';
 import type { MountContext, VisualTemplate } from '../visualTemplate.js';
 import {
+  type ArcMacros,
   type CellPaint,
   type ComposedIdiom,
   type IdiomProfile,
-  type ArcMacros,
   composeIdioms,
   createArcMacros,
   createCellPaint,
   profileFromSetup,
 } from '../idioms/index.js';
 import { cfg, makeVariantFactory } from '../mutations/familyVariants.js';
+import { type Rgb, hslToRgb } from './lib/palettes.js';
 
-interface ColorPair {
-  resting: [number, number, number];
-  active: [number, number, number];
-}
-const PALETTES: Record<string, ColorPair> = {
-  electric: { resting: [20, 70, 170], active: [120, 220, 255] },
-  biolume: { resting: [18, 120, 90], active: [150, 255, 205] },
-  rainbow: { resting: [150, 60, 180], active: [255, 210, 90] },
-  monochrome: { resting: [110, 110, 125], active: [240, 240, 250] },
-  fire: { resting: [140, 40, 12], active: [255, 180, 60] },
-  ice: { resting: [60, 110, 160], active: [205, 240, 255] },
-};
+const CUBE = 30;
+const GAP = 8;
 
 const variants = makeVariantFactory({
   palette: { canonical: 'electric', options: ['electric', 'biolume', 'rainbow', 'monochrome', 'fire', 'ice'] },
   connections: { canonical: 'medium', options: ['sparse', 'medium', 'dense', 'swarm'] },
-  depth: { canonical: 4, options: [4, 6, 8] },
+  depth: { canonical: '4', options: ['4', '8', '12'] },
   rotation: { canonical: 'isometric', options: ['isometric', 'rotating', 'top-down', 'flat'] },
-  flicker: { canonical: 'fast', options: ['fast', 'medium', 'slow', 'static'] },
+  flicker: { canonical: 'fast', options: ['fast', 'medium', 'slow', 'rare', 'static'] },
   cube: { canonical: 'solid', options: ['solid', 'wireframe', 'edge-only', 'shell'] },
 });
 
-function flickerMsFor(mode: string): number {
-  return mode === 'fast' ? 60 : mode === 'medium' ? 160 : mode === 'slow' ? 500 : Infinity;
-}
-function connRateFor(mode: string): { samples: number; prob: number } {
-  if (mode === 'sparse') return { samples: 1, prob: 0.02 };
-  if (mode === 'dense') return { samples: 3, prob: 0.12 };
-  if (mode === 'swarm') return { samples: 5, prob: 0.2 };
-  return { samples: 2, prob: 0.06 }; // medium
+const depthFor = (d: string): number => (d === '8' ? 8 : d === '12' ? 12 : 4);
+const flickerMsFor = (m: string): number =>
+  m === 'medium' ? 80 : m === 'slow' ? 250 : m === 'rare' ? 800 : m === 'static' ? Infinity : 25;
+const connRateFor = (m: string): { samples: number; prob: number } =>
+  m === 'sparse'
+    ? { samples: 50, prob: 0.01 }
+    : m === 'dense'
+      ? { samples: 150, prob: 0.04 }
+      : m === 'swarm'
+        ? { samples: 250, prob: 0.08 }
+        : { samples: 100, prob: 0.02 };
+
+/** windchime resting/active colour pairs (RGB only — alpha comes from the arc). */
+function gridPalette(mode: string, rng: { random(): number; range(a: number, b?: number): number }): {
+  resting: Rgb;
+  active: Rgb;
+} {
+  switch (mode) {
+    case 'biolume':
+      return { resting: [40, 120, 160], active: [180, 255, 220] };
+    case 'fire':
+      return { resting: [80, 20, 0], active: [255, 160, 40] };
+    case 'ice':
+      return { resting: [50, 90, 130], active: [180, 240, 255] };
+    case 'rainbow': {
+      const h = rng.range(0, 360);
+      return { resting: hslToRgb(h, 0.6, 0.5), active: hslToRgb((h + 180) % 360, 0.9, 0.6) };
+    }
+    case 'monochrome': {
+      const h = rng.range(0, 360);
+      return { resting: hslToRgb(h, 0.4, 0.3), active: hslToRgb(h, 0.9, 0.7) };
+    }
+    case 'electric':
+    default:
+      return { resting: [100, 150, 255], active: [255, 255, 0] };
+  }
 }
 
 interface Connection {
@@ -71,23 +91,37 @@ export const patternGridWorld: VisualTemplate = {
   name: 'Pattern Grid World',
   family: 'grid',
   description:
-    'A 3D cube field painted cell-by-cell, flickering and wired with connection lines. The varibright vs monobright showcase.',
+    'A 3D cube field painted cell-by-cell — brightness picks the lit depth layer — flickering, wired with connection lines, and ringed by an optional pulsing border.',
   tags: ['grid', 'cubes', '3d', 'neural', 'flicker', 'paint', 'monome', 'cellular'],
   defaultParams: { density: 0.6, motion: 0.4, turbulence: 0.5, contrast: 0.6, palette: 0.2 },
   renderer: 'webgl',
-  sourceLineage: 'windchime patternGridWorldV11 (PatternGridWorld_v11.pde)',
+  sourceLineage: 'windchime patternGridWorldV11 (PatternGridWorld_v11.pde, faithful port)',
   hardwareTarget: { grid: '128', arc: '4' },
   idioms: ['cellPaint', 'arcMacros'],
+  gestural: {
+    name: 'Neural Grid + Hypnotic Border',
+    summary:
+      'A 3D cube grid — un-pressed cells flicker; pressing a cell cycles its brightness 0→15 (and picks its lit depth layer). Arc encoders set the alpha + brightness curves; enc 2 press toggles a pulsing border.',
+    grid: [
+      { area: 'any cell', action: 'press', effect: 'cycle that cell\'s brightness 0→15 + stop its flicker' },
+      { area: 'un-pressed cells', action: 'idle', effect: 'random brightness flicker (speed = flicker variant)' },
+    ],
+    arc: [
+      { area: 'enc 0', action: 'turn / press', effect: 'resting-cube alpha · press re-rolls the resting colour' },
+      { area: 'enc 1', action: 'turn / press', effect: 'active-cube alpha · press re-rolls the active colour' },
+      { area: 'enc 2', action: 'turn / press', effect: 'background brightness · press randomises bg + toggles the border' },
+      { area: 'enc 3', action: 'turn', effect: 'connection-line opacity' },
+    ],
+  },
   variants,
 
   create(ctx: MountContext) {
-    const paletteName = cfg<string>(ctx.config, 'palette', 'electric');
-    const depth = cfg<number>(ctx.config, 'depth', 4);
+    const paletteMode = cfg<string>(ctx.config, 'palette', 'electric');
+    const depth = depthFor(cfg<string>(ctx.config, 'depth', '4'));
     const rotation = cfg<string>(ctx.config, 'rotation', 'isometric');
-    const flickerMode = cfg<string>(ctx.config, 'flicker', 'fast');
     const cubeStyle = cfg<string>(ctx.config, 'cube', 'solid');
     const connRate = connRateFor(cfg<string>(ctx.config, 'connections', 'medium'));
-    const flickMs = flickerMsFor(flickerMode);
+    const flickMs = flickerMsFor(cfg<string>(ctx.config, 'flicker', 'fast'));
 
     let profile: IdiomProfile = profileFromSetup(ctx.setup);
     const paint: CellPaint = createCellPaint({
@@ -99,8 +133,8 @@ export const patternGridWorld: VisualTemplate = {
     });
     const arc: ArcMacros = createArcMacros({
       encoders: [
-        { name: 'restAlpha', initial: 0.5, led: 'fill', onPress: () => randomizeColor('resting') },
-        { name: 'actAlpha', initial: 0.7, led: 'fill', onPress: () => randomizeColor('active') },
+        { name: 'restAlpha', initial: 0.5, led: 'fill', onPress: () => (restingRgb = gridPalette(paletteMode, ctx.rng).resting) },
+        { name: 'actAlpha', initial: 0.7, led: 'fill', onPress: () => (activeRgb = gridPalette(paletteMode, ctx.rng).active) },
         { name: 'bg', initial: 0.5, led: 'fill', onPress: () => toggleBorder() },
         { name: 'conn', initial: 0.6, led: 'fill' },
       ],
@@ -108,10 +142,10 @@ export const patternGridWorld: VisualTemplate = {
     const idioms: ComposedIdiom = composeIdioms([paint, arc]);
     idioms.setProfile(profile);
 
-    const base = PALETTES[paletteName] ?? (PALETTES.electric as ColorPair);
-    let resting: [number, number, number] = [...base.resting];
-    let active: [number, number, number] = [...base.active];
-    let bgBase: [number, number, number] = [0, 0, 0];
+    const base = gridPalette(paletteMode, ctx.rng);
+    let restingRgb: Rgb = base.resting;
+    let activeRgb: Rgb = base.active;
+    let bgBase: Rgb = [0, 0, 0];
     let borderOn = false;
     let borderShape = 0;
     let borderWeight = 8;
@@ -120,11 +154,6 @@ export const patternGridWorld: VisualTemplate = {
     let elapsed = 0;
     let cur: VisualParamVector = ctx.initialParams;
 
-    function randomizeColor(which: 'resting' | 'active'): void {
-      const c: [number, number, number] = [60 + ctx.rng.int(196), 60 + ctx.rng.int(196), 60 + ctx.rng.int(196)];
-      if (which === 'resting') resting = c;
-      else active = c;
-    }
     function toggleBorder(): void {
       bgBase = [ctx.rng.int(40), ctx.rng.int(40), ctx.rng.int(48)];
       borderOn = !borderOn;
@@ -135,8 +164,6 @@ export const patternGridWorld: VisualTemplate = {
       }
     }
 
-    const CUBE = 30;
-    const GAP = 8;
     const cellPos = (col: number, row: number, lvl: number, cols: number, rows: number): [number, number, number] => {
       const gw = cols * (CUBE + GAP) - GAP;
       const gh = rows * (CUBE + GAP) - GAP;
@@ -171,7 +198,7 @@ export const patternGridWorld: VisualTemplate = {
 
       draw({ p, width, height, dt }): void {
         elapsed += dt;
-        paint.tick(dt * 1000); // advance idle flicker
+        paint.tick(dt * 1000);
 
         const av = arc.values();
         const restA = Math.floor(lerp(20, 200, av.restAlpha ?? 0.5));
@@ -180,15 +207,15 @@ export const patternGridWorld: VisualTemplate = {
         const connOpacity = Math.floor(lerp(0, 255, av.conn ?? 0.6));
 
         p.background(bgBase[0] * bgB, bgBase[1] * bgB, bgBase[2] * bgB);
-        p.ambientLight(60);
-        p.directionalLight(255, 255, 255, 0.3, 0.5, -1);
 
-        // fit the cube field to the viewport
         const cells = paint.values().cells;
         const rows = cells.length;
         const cols = cells[0]?.length ?? 0;
-        const fieldW = cols * (CUBE + GAP);
-        const scale = Math.min(width, height) / (fieldW * 1.6 || 1);
+        if (rows === 0 || cols === 0) return;
+        const gw = cols * (CUBE + GAP);
+        const gh = rows * (CUBE + GAP);
+        const gd = depth * (CUBE + GAP);
+        const scale = Math.min(width, height) / (Math.max(gw, gh, gd) * 1.7);
 
         p.push();
         p.scale(scale);
@@ -208,19 +235,19 @@ export const patternGridWorld: VisualTemplate = {
             p.rotateY(Math.PI / 4);
         }
 
-        // cube field — brightness picks the active depth layer
+        // cube field — brightness picks the lit depth layer
         for (let row = 0; row < rows; row++) {
           const rowCells = cells[row];
           if (!rowCells) continue;
           for (let col = 0; col < cols; col++) {
             const norm = clamp01(rowCells[col] ?? 0);
-            const litLevel = Math.floor(norm * (depth - 1));
+            const lit = Math.floor(norm * (depth - 1));
             for (let lvl = 0; lvl < depth; lvl++) {
-              const isActive = lvl === litLevel && norm > 0;
+              const isActive = lvl === lit && norm > 0;
               if (cubeStyle === 'shell' && !isActive && lvl !== 0 && lvl !== depth - 1) continue;
               if (cubeStyle === 'edge-only' && !isActive) continue;
               const [x, y, z] = cellPos(col, row, lvl, cols, rows);
-              const c = isActive ? active : resting;
+              const c = isActive ? activeRgb : restingRgb;
               const a = isActive ? actA : restA;
               p.push();
               p.translate(x, y, z);
@@ -239,18 +266,15 @@ export const patternGridWorld: VisualTemplate = {
           }
         }
 
-        // connection lines (born, fade after 5s)
-        const want = connRate.samples;
+        // connection lines — sample pairs, fade over 5s
         const total = rows * cols * depth;
-        for (let s = 0; s < want; s++) {
+        for (let s = 0; s < connRate.samples; s++) {
           if (ctx.rng.random() < connRate.prob * (0.4 + cur.density)) {
             const pick = (): [number, number, number] => {
               const idx = ctx.rng.int(Math.max(1, total));
               const r = Math.floor(idx / (cols * depth));
               const rem = idx - r * cols * depth;
-              const c = Math.floor(rem / depth);
-              const l = rem % depth;
-              return cellPos(c, Math.min(rows - 1, r), l, cols, rows);
+              return cellPos(Math.floor(rem / depth), Math.min(rows - 1, r), rem % depth, cols, rows);
             };
             connections.push({ a: pick(), b: pick(), born: elapsed });
           }
@@ -262,42 +286,54 @@ export const patternGridWorld: VisualTemplate = {
             connections.splice(i, 1);
             continue;
           }
-          p.stroke(active[0], active[1], active[2], connOpacity);
+          p.stroke(activeRgb[0], activeRgb[1], activeRgb[2], connOpacity);
           p.line(conn.a[0], conn.a[1], conn.a[2], conn.b[0], conn.b[1], conn.b[2]);
         }
 
-        if (borderOn) drawBorder(p, cols, rows);
+        if (borderOn) {
+          borderProgress = (borderProgress + 0.05) % 1;
+          const iw = gw - GAP;
+          const ih = gh - GAP;
+          const id = gd - GAP;
+          const sc = 1 + 0.8 * borderProgress;
+          const maxDim = Math.max(iw, ih, id);
+          const t = 0.5 * (1 + Math.sin(elapsed * 6));
+          p.push();
+          p.noFill();
+          p.stroke(activeRgb[0] * t, activeRgb[1] * t, activeRgb[2] * t);
+          p.strokeWeight(borderWeight);
+          if (borderShape === 0) {
+            p.box(iw * sc, ih * sc, id * sc);
+          } else if (borderShape === 1) {
+            p.sphere(maxDim * 0.6 * sc);
+          } else if (borderShape === 2) {
+            p.push();
+            p.scale(sc * 1.4, sc, sc * 0.7);
+            p.sphere(maxDim * 0.5);
+            p.pop();
+          } else {
+            // pyramid — base rectangle + 4 edges to an apex
+            const hw = iw * sc * 0.5;
+            const hh = ih * sc * 0.5;
+            const hd = id * sc * 0.5;
+            p.beginShape(p.LINES);
+            p.vertex(-hw, hh, -hd); p.vertex(hw, hh, -hd);
+            p.vertex(hw, hh, -hd); p.vertex(hw, hh, hd);
+            p.vertex(hw, hh, hd); p.vertex(-hw, hh, hd);
+            p.vertex(-hw, hh, hd); p.vertex(-hw, hh, -hd);
+            p.vertex(0, -hh, 0); p.vertex(-hw, hh, -hd);
+            p.vertex(0, -hh, 0); p.vertex(hw, hh, -hd);
+            p.vertex(0, -hh, 0); p.vertex(hw, hh, hd);
+            p.vertex(0, -hh, 0); p.vertex(-hw, hh, hd);
+            p.endShape();
+          }
+          p.pop();
+        }
         p.pop();
 
         idioms.renderGrid(ctx.ledOut, profile);
         idioms.renderArc(ctx.ledOut, profile);
       },
     };
-
-    function drawBorder(p: p5, cols: number, rows: number): void {
-      borderProgress += 0.05;
-      if (borderProgress > 1) borderProgress = 0;
-      const iw = cols * (CUBE + GAP) - GAP;
-      const ih = rows * (CUBE + GAP) - GAP;
-      const id = depth * (CUBE + GAP) - GAP;
-      const s = 1 + 0.8 * borderProgress;
-      const maxDim = Math.max(iw, ih, id);
-      const t = 0.5 * (1 + Math.sin(elapsed * 6));
-      p.push();
-      p.noFill();
-      p.stroke(active[0] * t, active[1] * t, active[2] * t);
-      p.strokeWeight(borderWeight);
-      if (borderShape === 0) p.box(iw * s, ih * s, id * s);
-      else if (borderShape === 1) p.sphere(maxDim * 0.6 * s);
-      else if (borderShape === 2) {
-        p.push();
-        p.scale(s * 1.4, s, s * 0.7);
-        p.sphere(maxDim * 0.5);
-        p.pop();
-      } else {
-        p.box(iw * s, ih * s * 1.3, id * s); // stand-in pyramid prism
-      }
-      p.pop();
-    }
   },
 };
