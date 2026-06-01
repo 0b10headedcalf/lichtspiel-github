@@ -44,6 +44,15 @@ monome/keyboard controls work end-to-end.
   deliberate dev/"mutation lab" mode only.
 - Keep the demo robust: every output of an experimental layer must reduce to a
   safe control message (scene index / param vector / morph target).
+- **Adapt monome sketches through the idiom layer, faithfully** (see
+  `docs/idioms.md`). A sketch declares its control intent as logical idioms
+  (`apps/p5-runtime/src/idioms/`: faderBank / stepSequencer / cellPaint /
+  arcMacros); the idioms map it **1:1** to matching hardware and **fold** it for
+  fewer controls (Arc 2 / Grid 64) so all logical controls stay reachable. When
+  porting a windchime/Processing sketch, **preserve the original visual fidelity +
+  the full `params.ts` variant space + the gestural dictionary** — do NOT simplify
+  it down — and **never hardcode grid size / encoder count in a sketch**; declare
+  the idioms and let them adapt.
 
 ## Conventions
 

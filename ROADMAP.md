@@ -172,9 +172,18 @@ Decisions: adapt windchime p5 + variants · hybrid control (uniform fader baseli
   grid64/arc2) + the 9 windchime families adapted onto the idioms — Wave A
   (`monomeArcgridcombo`, `patternGridWorld`) verified, Wave B (`pasArcgrid`,
   `upfAvTest`, `monomeArc4Shapes`, `itoBox`, `parquetDeformation`, `pasHalloween`) via
-  a parallel per-sketch Workflow. Provenance in `visual-corpus/`. Browser-verified at
-  60fps + the hero hardware-verified on the real Grid 64 + Arc 2; grid128/arc4
-  hot-swap hardware pass is the remaining gate.
+  a parallel per-sketch Workflow. Provenance in `visual-corpus/`.
+- 🟡 **Part 3 fidelity rework** (active; plan `polymorphic-growing-karp.md`): the
+  first-pass Wave A/B ports lost windchime's visual fidelity + rich variant spaces.
+  Now re-porting each faithfully (visual core + full `params.ts` variant space +
+  gestural dictionary), plus the **gestural panel** + **variant browser**
+  (`v`/`c`/`,`/`.`, `h`) and **capability folding** in the idiom layer so 4-encoder
+  / Grid-128 sketches adapt to Arc 2 / Grid 64 (arcMacros press-cycling + faderBank
+  grid-folding — see `docs/idioms.md`). **Done + hardware-verified on the Grid 64 /
+  Arc 2: `lichtspielOpus`, `pasArcgrid`, `patternGridWorld`.** Remaining: faithfully
+  re-port the other 6 (upfAvTest, monomeArc4Shapes, itoBox, monomeArcgridcombo,
+  parquetDeformation, pasHalloween) + itoBox arc velocity mode. The grid128/arc4
+  hot-swap hardware pass is still open.
 
 ## Phase 5 — Metadata retrieval 🟡 (head start shipped)
 

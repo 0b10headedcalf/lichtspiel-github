@@ -9,14 +9,23 @@ windchime-animation (`/Users/trent/windchime-animation`). See `README.md`,
 
 - **Phases 0–4 done + hardware-verified.** Phase 3 (Max device) done; Phase 4
   (monome) done across all 4 devices + continuous hot-swap.
-- **Phase 4.5 in progress — the active plan.** Full approved plan:
-  `~/.claude/plans/delegated-foraging-cookie.md`.
-  - **Part 1 (hardware foundation) ✅ done** — caps fixes, authoritative
-    `monomeDevices`, auto-snap/grey-out, reliable detach, LED diffing, self-healing
-    serialosc auto-recovery. See `apps/live-bridge/src/serialosc.ts`,
-    `apps/p5-runtime/src/{monomeDevices,ui/monomeTwin,main}.ts`,
-    `packages/schemas/src/monomeProfiles.ts`.
-  - **Part 2 (idiom library) + Part 3 (corpus adaptation + variants) ⬜ NEXT.**
+- **Phase 4.5 — animation corpus + monome idiom layer (in progress).** Plans:
+  `~/.claude/plans/delegated-foraging-cookie.md` (Parts 1–3) +
+  `~/.claude/plans/polymorphic-growing-karp.md` (the fidelity rework, active).
+  - **Part 1 (hardware foundation) ✅** — caps fixes, authoritative `monomeDevices`,
+    auto-snap, reliable detach, LED diffing, self-healing serialosc.
+  - **Part 2 (idiom library) ✅** — faderBank / stepSequencer / cellPaint /
+    arcMacros + composeIdioms (`apps/p5-runtime/src/idioms/`) + headless idioms-smoke.
+  - **Part 3 (corpus + variants) ✅ first pass** — 14 templates, the gestural panel
+    + variant browser (`v`/`c`/`,`/`.`, `h`). THEN a **fidelity rework** (the active
+    plan): faithfully re-port each windchime family's visual core + full variant
+    space + gestural dict, with **capability folding** so 4-encoder / Grid-128
+    sketches adapt to Arc 2 / Grid 64. **Calibrated + hardware-verified:
+    `lichtspielOpus` (hero), `pasArcgrid`, `patternGridWorld`. Remaining: faithfully
+    re-port the other 6** (upfAvTest, monomeArc4Shapes, itoBox, monomeArcgridcombo,
+    parquetDeformation, pasHalloween).
+- **Before porting/adapting any monome sketch, read `docs/idioms.md`** — the
+  idiom layer, the 1:1-or-fold adaptation doctrine, and the porting recipe.
 - The cross-chat source of truth is the memory note **`project_lichtspiel.md`**
   (under the windchime project's memory). Read it first.
 
