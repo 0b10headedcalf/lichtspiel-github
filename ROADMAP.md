@@ -158,13 +158,23 @@ Decisions: adapt windchime p5 + variants · hybrid control (uniform fader baseli
   and **self-healing auto-recovery** (restarts serialoscd when a known device is
   present at USB but unlisted — recovers the Arc 4 FTDI clone on re-plug). Note:
   recovery is daemon-wide so it briefly blips all devices — refine later if wanted.
-- ⬜ **Part 2 — Idiom library** (`apps/p5-runtime/src/idioms/`): capability-aware
-  faderBank / stepSequencer / cellPaint / arcMacros, generalizing `monomeMapping.ts`
-  + `monomeFeedback.ts` + windchime's gestural dictionaries. + headless idioms-smoke.
-- ⬜ **Part 3 — Sketch adaptation + variants**: contract additions (`hardwareTarget`,
-  `idioms`, `altImpls`, `setProfile`, `MountContext.setup`, `VariantRecord`); port
-  the Opus III hero (`Lichtspiel_v3.pde`) + adapt the 9 windchime families with their
-  variant system. Wave A (hero + 2) → gate → Wave B (rest).
+- ✅ **Part 2 — Idiom library** (`apps/p5-runtime/src/idioms/`): capability-aware
+  `faderBank` / `stepSequencer` / `cellPaint` / `arcMacros` + `composeIdioms`, a pure
+  control/LED layer generalizing `monomeMapping.ts` + `monomeFeedback.ts` + windchime's
+  gestural dictionaries (`ledPolicies.ts` preserves the verified perfGrid/perfArc look).
+  Headless `idioms-smoke` (tsx): 46 checks under a Grid 64/Arc 2 AND a Grid 128/Arc 4
+  profile (values change, sized/lit frames, push-gating, compose-overlap).
+- ✅ **Part 3 — Sketch adaptation + variants**: contract additions (`hardwareTarget`,
+  `idioms`, `altImpls`, `setProfile`, `MountContext.setup`+`controls`, `variants`,
+  `VariantRecord`); host `getSetup`/`setProfile`/clear-LED-on-swap; the variant system
+  (`familyVariants.ts`, `v`-key structural re-roll) + the idiom-vs-global mapping gate.
+  **14 templates total**: the hand-ported **Opus III hero** (`lichtspielOpus`,
+  grid64/arc2) + the 9 windchime families adapted onto the idioms — Wave A
+  (`monomeArcgridcombo`, `patternGridWorld`) verified, Wave B (`pasArcgrid`,
+  `upfAvTest`, `monomeArc4Shapes`, `itoBox`, `parquetDeformation`, `pasHalloween`) via
+  a parallel per-sketch Workflow. Provenance in `visual-corpus/`. Browser-verified at
+  60fps + the hero hardware-verified on the real Grid 64 + Arc 2; grid128/arc4
+  hot-swap hardware pass is the remaining gate.
 
 ## Phase 5 — Metadata retrieval 🟡 (head start shipped)
 
@@ -210,10 +220,9 @@ logs, never a broken performance state.
 
 ## Backlog / stretch 🔭
 
-**`lichtspielOpus` signature template** — port `Lichtspiel_v3`'s Ruttmann
-*Opus III* morphing tunnel (interior sphere morphs + 2D rect forms + film-grain
-damage) as the hero scene; it already defines the canonical monome idiom. ·
-Strudel audio co-generation · Hydra backend · TouchDesigner/Syphon/NDI handoff ·
+**`lichtspielOpus` signature template** — ✅ shipped in Phase 4.5 (the Ruttmann
+*Opus III* morphing tunnel + 2D rect forms + film-grain, faderBank+arcMacros on
+grid64/arc2). · Strudel audio co-generation · Hydra backend · TouchDesigner/Syphon/NDI handoff ·
 fine-tuned mapping over a personal visual corpus · in-Live p5 editor ·
 clip→visual preset saving in the Live Set · packaged M4L installer · the full
 `umwelt` module (environment-aware visual ecology, evolving visual memory,

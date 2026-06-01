@@ -12,6 +12,12 @@ import { torusField } from './torusField.js';
 import { lichtspielOpus } from './lichtspielOpus.js';
 import { monomeArcgridcombo } from './monomeArcgridcombo.js';
 import { patternGridWorld } from './patternGridWorld.js';
+import { pasArcgrid } from './pasArcgrid.js';
+import { upfAvTest } from './upfAvTest.js';
+import { monomeArc4Shapes } from './monomeArc4Shapes.js';
+import { itoBox } from './itoBox.js';
+import { parquetDeformation } from './parquetDeformation.js';
+import { pasHalloween } from './pasHalloween.js';
 
 export const TEMPLATES: readonly VisualTemplate[] = [
   minimalPulse,
@@ -22,6 +28,12 @@ export const TEMPLATES: readonly VisualTemplate[] = [
   lichtspielOpus,
   monomeArcgridcombo,
   patternGridWorld,
+  pasArcgrid,
+  upfAvTest,
+  monomeArc4Shapes,
+  itoBox,
+  parquetDeformation,
+  pasHalloween,
 ];
 
 export {
@@ -33,4 +45,10 @@ export {
   lichtspielOpus,
   monomeArcgridcombo,
   patternGridWorld,
+  pasArcgrid,
+  upfAvTest,
+  monomeArc4Shapes,
+  itoBox,
+  parquetDeformation,
+  pasHalloween,
 };

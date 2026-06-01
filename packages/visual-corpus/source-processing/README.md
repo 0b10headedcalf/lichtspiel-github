@@ -18,6 +18,33 @@ Source corpus (local, not vendored here):
 | `parquetGlitch` | p2d | `Parquet_v3_glitch.pde` | Parquet deformation (rotation/scale gradient of tiles) + glitch slicing. |
 | `torusField` | webgl | `monomearc4shapescontrolv12.pde` | Arc-controlled 3D object family: tori / spheres / wavy tori. |
 
+## Phase 4.5 — Animation corpus (idiom-driven)
+
+These templates route control + LED through the capability-aware **monome idiom
+layer** (`apps/p5-runtime/src/idioms/` — faderBank / stepSequencer / cellPaint /
+arcMacros + `composeIdioms`), so each adapts to whatever monome is connected and
+declares its native `hardwareTarget`. The Opus III hero is hand-ported fresh from
+the grid64/arc2 source; the rest are adapted from the **windchime-animation**
+`packages/sketch-families/` ports (a sibling repo — concepts, not code).
+
+| Lichtspiel template | Renderer | Idioms | Native | Windchime/Processing lineage | What was adapted |
+|---|---|---|---|---|---|
+| `lichtspielOpus` | p2d | faderBank + arcMacros | grid64/arc2 | `Lichtspiel_v3.pde` (idiom master) | Ruttmann Opus III morphing tunnel + 2D rect forms + film grain; P3D→P2D manual projection; the canonical 8-fader + arc twist/aperture control map. |
+| `monomeArcgridcombo` | webgl | stepSequencer + arcMacros | grid128/arc4 | `Monome_arcgridcombo.pde` | 16-step sequencer triggering 4 arc-driven rotating 3D objects. |
+| `patternGridWorld` | webgl | cellPaint + arcMacros | grid128/arc4 | `PatternGridWorld_v11.pde` | 3D cube field painted per-cell, flicker + connection lines + pulsing border. |
+| `pasArcgrid` | webgl | faderBank + arcMacros | grid128/arc4 | `pasArcgridv7` | 4 wireframe/platonic objects; faders = rotation freq, arc = size + regen. |
+| `upfAvTest` | webgl | faderBank + arcMacros | grid128/arc4 | `UPF_AV_Testv14.pde` | Topographic plane meshes + forward noise tunnel. |
+| `monomeArc4Shapes` | webgl | faderBank + arcMacros | grid128/arc4 | `monomearc4shapescontrolv12.pde` | Orbiting tori/spheres under animated 2D strobe motifs. |
+| `itoBox` | webgl | faderBank + arcMacros | grid128/arc4 | `itoBoxV9` | Velocity-driven cube roulette + background object field. |
+| `parquetDeformation` | webgl | stepSequencer + arcMacros | grid128/arc4 | `Parquet_v3_glitch.pde` | Deforming Perlin meshes + polyhedra row, step-triggered. |
+| `pasHalloween` | p2d | stepSequencer + arcMacros | grid128/arc4 | `pasHalloweenV3` | 2D step-driven shape spawner with motion trails. |
+
+The **idiom layer itself** (`idioms/`) generalizes windchime's per-sketch gestural
+dictionaries + Lichtspiel's `monomeMapping.ts` / `monomeFeedback.ts` into a reusable
+capability-aware vocabulary; `ledPolicies.ts` preserves the hardware-verified
+`perfGridLevel` / `perfArcLevel` + diagnostic7 LED aesthetics. Variants follow the
+windchime `canonical / generate(divergence)` pattern via `mutations/familyVariants.ts`.
+
 Utility lineage (adapted, fresh implementations):
 
 - **Seeded RNG** (`apps/p5-runtime/src/seededRng.ts`) — mulberry32, adapted from

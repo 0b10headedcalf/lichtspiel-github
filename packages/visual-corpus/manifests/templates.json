@@ -1,6 +1,6 @@
 {
-  "$comment": "Serializable catalog of visual templates. Mirrors TemplateRegistry.catalog() in apps/p5-runtime. The bridge + ml-service read this to reason about scenes without importing p5. Keep in sync with src/templates/*.",
-  "version": "0.1.0",
+  "$comment": "Serializable catalog of visual templates. Mirrors TemplateRegistry.catalog() in apps/p5-runtime. The bridge + ml-service read this to reason about scenes without importing p5. Keep in sync with src/templates/*. Templates adapted in Phase 4.5 carry hardwareTarget + idioms (the monome control idioms they drive); the 5 legacy templates use the global column-fader mapping and declare neither.",
+  "version": "0.2.0",
   "templates": [
     {
       "id": "minimalPulse",
@@ -51,6 +51,114 @@
       "defaultParams": { "density": 0.45, "motion": 0.4, "turbulence": 0.25, "cameraDepth": 0.5, "rotationX": 0.55, "rotationY": 0.5, "rotationZ": 0.5, "palette": 0.7, "contrast": 0.6, "lineWeight": 0.35 },
       "renderer": "webgl",
       "sourceLineage": "monomearc4shapescontrolv12.pde"
+    },
+    {
+      "id": "lichtspielOpus",
+      "name": "Lichtspiel — Opus III",
+      "family": "lichtspiel",
+      "description": "Ruttmann Opus III film instrument: a morphing forward tunnel inside 2D rectilinear forms, weathered by film grain. The grid64/arc2 hero.",
+      "tags": ["film", "tunnel", "ruttmann", "monome", "hero", "abstract", "grain", "slow"],
+      "defaultParams": { "motion": 0.5, "density": 0.5, "turbulence": 0.5, "cameraDepth": 0.55, "contrast": 0.6, "palette": 0.0, "strobe": 0.2 },
+      "renderer": "p2d",
+      "sourceLineage": "Lichtspiel_v3.pde (hand-ported, concept-adapted P3D→P2D)",
+      "hardwareTarget": { "grid": "64", "arc": "2" },
+      "idioms": ["faderBank", "arcMacros"]
+    },
+    {
+      "id": "monomeArcgridcombo",
+      "name": "Arc + Grid Combo",
+      "family": "sequencer",
+      "description": "16-step grid sequencer triggering four arc-driven rotating 3D objects. The Grid 128 / Arc 4 idiom showcase.",
+      "tags": ["sequencer", "step", "arc", "rotation", "3d", "rhythmic", "percussive", "monome"],
+      "defaultParams": { "motion": 0.5, "turbulence": 0.5, "density": 0.5, "contrast": 0.6, "palette": 0.3 },
+      "renderer": "webgl",
+      "sourceLineage": "windchime monomeArcgridcombo (Monome_arcgridcombo.pde)",
+      "hardwareTarget": { "grid": "128", "arc": "4" },
+      "idioms": ["stepSequencer", "arcMacros"]
+    },
+    {
+      "id": "patternGridWorld",
+      "name": "Pattern Grid World",
+      "family": "grid",
+      "description": "A 3D cube field painted cell-by-cell, flickering and wired with connection lines. The varibright vs monobright showcase.",
+      "tags": ["grid", "cubes", "3d", "neural", "flicker", "paint", "monome", "cellular"],
+      "defaultParams": { "density": 0.6, "motion": 0.4, "turbulence": 0.5, "contrast": 0.6, "palette": 0.2 },
+      "renderer": "webgl",
+      "sourceLineage": "windchime patternGridWorldV11 (PatternGridWorld_v11.pde)",
+      "hardwareTarget": { "grid": "128", "arc": "4" },
+      "idioms": ["cellPaint", "arcMacros"]
+    },
+    {
+      "id": "pasArcgrid",
+      "name": "PAS Arc + Grid",
+      "family": "objects",
+      "description": "Four independent 3D wireframe objects tumbling on X/Y/Z; grid faders set each object's rotation frequency, arc encoders scale + regenerate them.",
+      "tags": ["3d", "wireframe", "rotation", "objects", "faders", "arc", "monome", "platonic"],
+      "defaultParams": { "motion": 0.5, "turbulence": 0.5, "density": 0.5, "contrast": 0.6, "palette": 0.4 },
+      "renderer": "webgl",
+      "sourceLineage": "windchime pasArcgridv7 (PAS_arcgridv7.pde)",
+      "hardwareTarget": { "grid": "128", "arc": "4" },
+      "idioms": ["faderBank", "arcMacros"]
+    },
+    {
+      "id": "upfAvTest",
+      "name": "UPF AV — Topographic Planes + Tunnel",
+      "family": "topographic",
+      "description": "Noise-displaced topographic plane meshes drifting through a forward noise-tunnel; grid faders sculpt the meshes + tunnel, arc encoders scale + regenerate the planes.",
+      "tags": ["topographic", "tunnel", "noise", "mesh", "3d", "planes", "arc", "fader", "monome", "flow"],
+      "defaultParams": { "density": 0.5, "motion": 0.5, "turbulence": 0.5, "cameraDepth": 0.5, "contrast": 0.6, "palette": 0.4 },
+      "renderer": "webgl",
+      "sourceLineage": "windchime upfAvTestv14 (UPF_AV_Testv14.pde, concept-adapted)",
+      "hardwareTarget": { "grid": "128", "arc": "4" },
+      "idioms": ["faderBank", "arcMacros"]
+    },
+    {
+      "id": "monomeArc4Shapes",
+      "name": "Arc 4 Shapes + Strobes",
+      "family": "overlay",
+      "description": "Orbiting 3D tori/spheres under animated 2D strobe motifs; grid faders set per-motif opacity/gap, arc encoders drive movement/speed/size/rotation.",
+      "tags": ["arc", "strobe", "overlay", "3d", "tori", "spheres", "psychedelic", "monome", "orbit"],
+      "defaultParams": { "motion": 0.5, "turbulence": 0.5, "density": 0.55, "contrast": 0.6, "strobe": 0.4, "palette": 0.4 },
+      "renderer": "webgl",
+      "sourceLineage": "windchime monomeArc4Shapesv12 (monomearc4shapescontrolv12.pde)",
+      "hardwareTarget": { "grid": "128", "arc": "4" },
+      "idioms": ["faderBank", "arcMacros"]
+    },
+    {
+      "id": "itoBox",
+      "name": "Ito Box — Cube Roulette",
+      "family": "roulette",
+      "description": "A velocity-driven roulette cube with per-face colours over a drifting field of low-poly objects; arc encoders are angular-velocity knobs, grid faders shape the background.",
+      "tags": ["cube", "roulette", "3d", "rotation", "velocity", "arc", "fader", "monome"],
+      "defaultParams": { "motion": 0.5, "turbulence": 0.5, "density": 0.5, "contrast": 0.6, "cameraDepth": 0.5, "palette": 0.4 },
+      "renderer": "webgl",
+      "sourceLineage": "windchime itoBoxV9 (Ito_Box_v9.pde)",
+      "hardwareTarget": { "grid": "128", "arc": "4" },
+      "idioms": ["faderBank", "arcMacros"]
+    },
+    {
+      "id": "parquetDeformation",
+      "name": "Parquet Deformation",
+      "family": "mesh",
+      "description": "Deforming Perlin meshes + a row of rotating polyhedra; a step sequencer retriggers deformation bursts, arc encoders drive camera zoom/tilt/overlay.",
+      "tags": ["mesh", "tessellation", "deformation", "noise", "step", "sequencer", "3d", "arc", "monome"],
+      "defaultParams": { "density": 0.5, "motion": 0.5, "turbulence": 0.5, "contrast": 0.6, "palette": 0.4 },
+      "renderer": "webgl",
+      "sourceLineage": "windchime parquetDeformation (Parquet_v3_glitch.pde)",
+      "hardwareTarget": { "grid": "128", "arc": "4" },
+      "idioms": ["stepSequencer", "arcMacros"]
+    },
+    {
+      "id": "pasHalloween",
+      "name": "PAS Halloween",
+      "family": "sequencer",
+      "description": "A 2D step-driven element spawner: firing steps birth drifting circle/triangle/square/star shapes over a fading trail backdrop; arc encoders set trail/hue/lifespan/jitter.",
+      "tags": ["sequencer", "step", "arc", "shapes", "trails", "2d", "rhythmic", "monome", "spawner"],
+      "defaultParams": { "motion": 0.5, "density": 0.5, "turbulence": 0.5, "lineWeight": 0.5, "palette": 0.4, "contrast": 0.6, "feedback": 0.5 },
+      "renderer": "p2d",
+      "sourceLineage": "windchime pasHalloweenV3 (PAS_Haloweenv3.pde, concept-adapted)",
+      "hardwareTarget": { "grid": "128", "arc": "4" },
+      "idioms": ["stepSequencer", "arcMacros"]
     }
   ]
 }
