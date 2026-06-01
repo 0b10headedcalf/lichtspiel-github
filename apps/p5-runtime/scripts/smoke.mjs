@@ -48,7 +48,7 @@ for (const id of ids.keys()) {
   }
 }
 
-const EXPECTED = 5;
+const EXPECTED = 8;
 if (ids.size < EXPECTED) {
   console.error(`✗ expected at least ${EXPECTED} templates, found ${ids.size}`);
   failures++;

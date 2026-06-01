@@ -10,6 +10,8 @@ import { gridWorld } from './gridWorld.js';
 import { parquetGlitch } from './parquetGlitch.js';
 import { torusField } from './torusField.js';
 import { lichtspielOpus } from './lichtspielOpus.js';
+import { monomeArcgridcombo } from './monomeArcgridcombo.js';
+import { patternGridWorld } from './patternGridWorld.js';
 
 export const TEMPLATES: readonly VisualTemplate[] = [
   minimalPulse,
@@ -18,6 +20,17 @@ export const TEMPLATES: readonly VisualTemplate[] = [
   parquetGlitch,
   torusField,
   lichtspielOpus,
+  monomeArcgridcombo,
+  patternGridWorld,
 ];
 
-export { minimalPulse, topographicTunnel, gridWorld, parquetGlitch, torusField, lichtspielOpus };
+export {
+  minimalPulse,
+  topographicTunnel,
+  gridWorld,
+  parquetGlitch,
+  torusField,
+  lichtspielOpus,
+  monomeArcgridcombo,
+  patternGridWorld,
+};
