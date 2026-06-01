@@ -1,8 +1,9 @@
 /**
  * Gestural panel — the on-screen control map for the active template (what each
  * grid/arc gesture does) + a live variant readout. Adapted (not forked) from
- * windchime apps/web/src/ui/gesturalPanel.ts. Toggle with `h`. Self-mounts a
- * fixed panel; hidden by default so it never blocks the canvas.
+ * windchime apps/web/src/ui/gesturalPanel.ts. Always present but **collapsed by
+ * default** (compact: idiom name + variant line); `h` or a click on the header
+ * expands it to the full control map. Positioned down the left, clear of the HUD.
  */
 
 import type { GesturalDictionary, GesturalEntry } from '@lichtspiel/schemas';
@@ -15,29 +16,41 @@ export class GesturalPanel {
   private readonly gridEl: HTMLElement;
   private readonly arcEl: HTMLElement;
   private readonly variantEl: HTMLElement;
-  private visible = false;
+  private collapsed = true;
 
   constructor(parent: HTMLElement = document.body) {
-    this.root = el('div', 'gestural-panel hidden');
-    this.titleEl = el('div', 'gp-title');
+    this.root = el('div', 'gestural-panel collapsed');
+
+    const header = el('div', 'gp-header');
+    const caret = el('span', 'gp-caret');
+    caret.textContent = '▸';
+    this.titleEl = el('span', 'gp-title');
+    header.append(caret, this.titleEl);
+    header.addEventListener('click', () => this.toggle());
+
+    this.variantEl = el('div', 'gp-variant');
+
+    const body = el('div', 'gp-body');
     this.summaryEl = el('div', 'gp-summary');
     this.gridEl = el('div', 'gp-section');
     this.arcEl = el('div', 'gp-section');
-    this.variantEl = el('div', 'gp-variant');
-    this.root.append(this.titleEl, this.summaryEl, this.gridEl, this.arcEl, this.variantEl);
+    body.append(this.summaryEl, this.gridEl, this.arcEl);
+
+    this.root.append(header, this.variantEl, body);
     parent.appendChild(this.root);
   }
 
+  /** Expand ↔ collapse (the `h` key + the header click). */
   toggle(): void {
-    this.visible = !this.visible;
-    this.root.classList.toggle('hidden', !this.visible);
+    this.collapsed = !this.collapsed;
+    this.root.classList.toggle('collapsed', this.collapsed);
   }
 
   /** Set the active template's control map (or clear it for a scene with none). */
   setDictionary(dict: GesturalDictionary | undefined): void {
     if (!dict) {
-      this.titleEl.textContent = '—';
-      this.summaryEl.textContent = 'No gestural map for this scene (global column-fader mapping).';
+      this.titleEl.textContent = '— global column-fader';
+      this.summaryEl.textContent = 'No gestural map for this scene (legacy mapping).';
       this.gridEl.innerHTML = '';
       this.arcEl.innerHTML = '';
       return;
@@ -59,9 +72,8 @@ export class GesturalPanel {
       .map((k) => `${k}=${String(info.config[k])}`);
     const head = info.divergence === 0 ? 'canonical' : `variant · seed ${info.seed}`;
     this.variantEl.innerHTML =
-      '<div class="gp-section-label">variant</div>' +
-      `<div class="gp-vrow">${escapeHtml(head)}</div>` +
-      (diverged.length ? `<div class="gp-vaxes">${escapeHtml(diverged.join(' · '))}</div>` : '');
+      `<span class="gp-vrow">${escapeHtml(head)}</span>` +
+      (diverged.length ? `<span class="gp-vaxes">${escapeHtml(diverged.join(' · '))}</span>` : '');
   }
 
   private renderSection(container: HTMLElement, label: string, entries: GesturalEntry[]): void {

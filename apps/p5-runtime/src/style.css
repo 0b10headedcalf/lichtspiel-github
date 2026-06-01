@@ -212,16 +212,16 @@ body {
   cursor: pointer;
 }
 
-/* ── Gestural panel (control map + variant readout, toggle `h`) ──────── */
+/* ── Gestural panel (control map + variant; right side, toggle `h`) ──── */
+/* Right-anchored so it never overlaps the top-left HUD; collapsed by default. */
 .gestural-panel {
   position: fixed;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+  right: 12px;
+  top: 12px;
   width: 300px;
-  max-height: 84vh;
+  max-height: calc(100vh - 24px);
   overflow-y: auto;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: rgba(8, 10, 14, 0.82);
   border: 1px solid rgba(120, 200, 255, 0.18);
   border-radius: 8px;
@@ -231,16 +231,36 @@ body {
   backdrop-filter: blur(6px);
   z-index: 20;
 }
+.gestural-panel.collapsed {
+  overflow: hidden;
+}
+.gestural-panel.collapsed .gp-body {
+  display: none;
+}
+.gp-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.gp-caret {
+  color: #7fd0ff;
+  font-size: 9px;
+  transition: transform 0.12s ease;
+}
+.gestural-panel:not(.collapsed) .gp-caret {
+  transform: rotate(90deg);
+}
 .gp-title {
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   color: #7fd0ff;
-  margin-bottom: 2px;
 }
 .gp-summary {
   color: #9fb3c8;
   font-style: italic;
-  margin-bottom: 8px;
+  margin: 6px 0;
 }
 .gp-section {
   margin-bottom: 6px;
@@ -277,16 +297,17 @@ body {
   color: #cfe8ff;
 }
 .gp-variant {
-  margin-top: 6px;
-  border-top: 1px solid rgba(120, 200, 255, 0.12);
-  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 3px;
 }
 .gp-vrow {
   color: #8effc0;
   font-family: ui-monospace, monospace;
+  font-size: 10px;
 }
 .gp-vaxes {
   color: #9fb3c8;
   font-size: 10px;
-  margin-top: 2px;
 }

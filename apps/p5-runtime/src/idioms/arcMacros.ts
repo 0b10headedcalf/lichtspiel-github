@@ -77,7 +77,10 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
     name: 'arcMacros',
 
     onArcDelta(e: ArcDeltaEvent): void {
-      if (e.encoder < 0 || e.encoder >= encs.length || e.encoder >= profile.encoders) return;
+      // Trust the hardware: an event for encoder N means N exists. Bound only to
+      // the configured specs — a stale/empty profile (an arc reconnect blip, or
+      // the instant after a variant re-mount) must NOT silently drop input.
+      if (e.encoder < 0 || e.encoder >= encs.length) return;
       const enc = encs[e.encoder];
       if (!enc) return;
       const sens = enc.spec.sensitivity ?? profile.arcRingLeds;
@@ -86,16 +89,17 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
     },
 
     onArcKey(e: ArcKeyEvent): void {
-      if (e.encoder < 0 || e.encoder >= encs.length || e.encoder >= profile.encoders) return;
+      if (e.encoder < 0 || e.encoder >= encs.length) return;
       const enc = encs[e.encoder];
       if (!enc) return;
       if (e.state !== 1) {
         enc.held = false;
         return;
       }
-      // Per-encoder clicks only count when the hardware reports them; otherwise
-      // only the shared button (encoder 0) is real — the rest go via press().
-      if (!profile.pushPerEncoder && e.encoder !== 0) return;
+      // Only suppress non-enc0 presses when we KNOW the device has a single
+      // shared button (no per-encoder push). On a stale/empty profile, trust the
+      // event — both the Arc 2 and Arc 4 report per-encoder /enc/key.
+      if (profile.encoders > 0 && !profile.pushPerEncoder && e.encoder !== 0) return;
       enc.held = true;
       fire(e.encoder);
     },
