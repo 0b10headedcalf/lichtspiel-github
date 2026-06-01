@@ -240,11 +240,46 @@ function checkPushGating(): void {
   ok(e1 === 1, 'keyboard fallback fires the gated enc1');
 }
 
+// arcMacros press FOLDING — a 4-logical-encoder sketch on fewer physical encoders
+// cycles each physical encoder through the logical presses it covers.
+function checkArcFolding(): void {
+  console.log('\n[arc press folding]');
+  const mk = (sink: number[]) =>
+    createArcMacros({ encoders: [0, 1, 2, 3].map((i) => ({ name: `e${i}`, onPress: () => sink.push(i) })) });
+
+  const f0: number[] = [];
+  const a = mk(f0);
+  a.setProfile(profileFromSetup({ grid: null, arc: ARC_2 })); // 2 physical encoders
+  for (let k = 0; k < 3; k++) {
+    a.onArcKey(ak(0, 1));
+    a.onArcKey(ak(0, 0));
+  }
+  ok(f0.join(',') === '0,2,0', `Arc 2: enc0 press cycles logical 0→2→0 (got ${f0.join(',')})`);
+
+  const f1: number[] = [];
+  const b = mk(f1);
+  b.setProfile(profileFromSetup({ grid: null, arc: ARC_2 }));
+  for (let k = 0; k < 2; k++) {
+    b.onArcKey(ak(1, 1));
+    b.onArcKey(ak(1, 0));
+  }
+  ok(f1.join(',') === '1,3', `Arc 2: enc1 press cycles logical 1→3 (got ${f1.join(',')})`);
+
+  const f4: number[] = [];
+  const c = mk(f4);
+  c.setProfile(profileFromSetup({ grid: null, arc: ARC_4 })); // 4 physical → 1:1, no folding
+  c.onArcKey(ak(0, 1));
+  c.onArcKey(ak(0, 0));
+  c.onArcKey(ak(0, 1));
+  ok(f4.join(',') === '0,0', `Arc 4: enc0 stays 1:1 — always logical 0 (got ${f4.join(',')})`);
+}
+
 // ── run ───────────────────────────────────────────────────────────
 console.log('idioms-smoke — capability-aware monome idiom library');
 checkProfile('grid64/arc2', { grid: GRID_64, arc: ARC_2 });
 checkProfile('grid128/arc4', { grid: GRID_128, arc: ARC_4 });
 checkPushGating();
+checkArcFolding();
 
 if (failures > 0) {
   console.error(`\n${failures}/${checks} idiom check(s) failed`);
