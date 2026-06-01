@@ -1,15 +1,19 @@
 /**
- * monomeArcgridcombo — adapted (not forked) from windchime-animation
+ * monomeArcgridcombo — faithful port (not forked) of windchime-animation
  * packages/sketch-families/src/monomeArcgridcombo (itself a port of
- * processing_corpus_test1/Monome_arcgridcombo). A 16-step grid sequencer whose
- * active steps trigger four arc-driven rotating 3D objects.
+ * Monome_arcgridcombo.pde). Four solid 3D objects (box / sphere / torus) spin on
+ * a black field, arranged per the variant; a 16-step grid sequencer flashes a
+ * white scanline for every lane firing under the play-head. The full variant
+ * space is preserved: 5 palettes · 4 object-kind sets · 4 arrangements · 4 step
+ * timings (incl. half-half) · the FIVE arc LED policies (comet/spot/sweep/bar/
+ * opposing). The objects start gently spinning (windchime's 0.01 rad/frame seed).
  *
- * Lichtspiel rewiring: the bespoke per-sketch grid/arc handling is replaced by
- * the Part-2 idioms — a `stepSequencer` (toggle steps + playhead + loop/cut
- * latch, 16 steps on a Grid 128, 8 on a Grid 64) and `arcMacros` (each encoder
- * a rotation-speed knob, press = stop; rings show the speed via the variant's
- * LED policy). The visual core (rotating box/sphere/torus, arrangement, palette)
- * is ported and parameterised by a structural variant. WEBGL, browser-resilient.
+ * Lichtspiel rewiring: windchime's hardcoded 16-col grid + 4 arc encoders become
+ * a `stepSequencer` (6 lanes + play-head + cut/loop latch; 16 steps on a Grid 128,
+ * 8 on a Grid 64) + `arcMacros` in VELOCITY mode (turn = spin-up impulse, press =
+ * stop, free-wheel damping — the windchime "+= delta" rotation-speed feel), so the
+ * surface adapts to the connected device. The arc rings show each object's rotation
+ * phase via the chosen policy; the objects' rotation is locked to it. WEBGL.
  */
 
 import { type VisualParamVector, lerp } from '@lichtspiel/schemas';
@@ -26,95 +30,160 @@ import {
   profileFromSetup,
 } from '../idioms/index.js';
 import { cfg, makeVariantFactory } from '../mutations/familyVariants.js';
+import { type Rgb, hslToRgb } from './lib/palettes.js';
 
-/** Four-object colour sets per palette variant. */
-const PALETTES: Record<string, number[][]> = {
-  warm: [
-    [240, 120, 40],
-    [230, 60, 60],
-    [250, 200, 80],
-    [205, 90, 140],
-  ],
-  cool: [
-    [60, 160, 230],
-    [80, 220, 200],
-    [120, 120, 240],
-    [60, 230, 150],
-  ],
-  mono: [
-    [235, 235, 240],
-    [150, 150, 160],
-    [200, 200, 210],
-    [120, 120, 135],
-  ],
-  acid: [
-    [180, 250, 40],
-    [250, 80, 200],
-    [60, 250, 160],
-    [250, 230, 40],
-  ],
-};
+const TWO_PI = Math.PI * 2;
+const SPIN_IMPULSE = 0.0008; // arc delta → phase-turns/frame (windchime feel)
+const SEED_SPIN = 0.0016; // ≈ windchime's 0.01 rad/frame mount spin
+
+/** windchime stepTime (frames @60fps) per timing mode. half-half alternates 25/75. */
+const stepFramesFor = (mode: string): number =>
+  mode === 'fast-25' ? 25 : mode === 'slow-100' ? 100 : 50;
 
 const variants = makeVariantFactory({
-  palette: { canonical: 'warm', options: ['warm', 'cool', 'mono', 'acid'] },
-  objects: { canonical: 'mixed', options: ['mixed', 'boxes', 'spheres', 'tori'] },
-  arrangement: { canonical: 'row', options: ['row', 'arc', 'depth', 'cluster'] },
-  arcLed: { canonical: 'comet', options: ['comet', 'marker', 'segments', 'gauge'] },
-  tempo: { canonical: 'steady', options: ['steady', 'fast', 'slow'] },
+  palette: { canonical: 'random', options: ['random', 'warm', 'cool', 'monochrome', 'complement'] },
+  objectKinds: { canonical: 'mixed', options: ['mixed', 'boxes', 'spheres', 'mixed-3d'] },
+  arrangement: { canonical: 'horizontal', options: ['horizontal', 'stacked', 'circle', 'scattered'] },
+  stepTiming: { canonical: 'steady-50', options: ['steady-50', 'fast-25', 'slow-100', 'half-half'] },
+  arcLed: { canonical: 'comet', options: ['comet', 'spot', 'sweep', 'bar', 'opposing'] },
 });
 
-const MAX_SPEED = 0.06; // rad/frame at a fully-turned encoder
+/** windchime monomeArcgridcombo paletteColors — 4 RGB tuples per mode. */
+function paletteColors4(mode: string, rng: MountContext['rng']): Rgb[] {
+  const out: Rgb[] = [];
+  switch (mode) {
+    case 'warm':
+      for (let i = 0; i < 4; i++) out.push(hslToRgb(rng.range(0, 60), rng.range(0.7, 1), rng.range(0.45, 0.65)));
+      break;
+    case 'cool':
+      for (let i = 0; i < 4; i++) out.push(hslToRgb(rng.range(180, 270), rng.range(0.6, 1), rng.range(0.45, 0.7)));
+      break;
+    case 'monochrome': {
+      const hue = rng.range(0, 360);
+      for (let i = 0; i < 4; i++) out.push(hslToRgb(hue, rng.range(0.6, 0.9), rng.range(0.35, 0.75)));
+      break;
+    }
+    case 'complement': {
+      const base = rng.range(0, 360);
+      const comp = (base + 180) % 360;
+      for (let i = 0; i < 4; i++) out.push(hslToRgb(i % 2 === 0 ? base : comp, rng.range(0.65, 1), rng.range(0.45, 0.65)));
+      break;
+    }
+    case 'random':
+    default:
+      for (let i = 0; i < 4; i++) out.push([rng.int(256), rng.int(256), rng.int(256)]);
+  }
+  return out;
+}
+
+/** windchime objectKinds — 4 values in {0 box, 1 sphere, 2 torus}. */
+function objectKinds4(mode: string, rng: MountContext['rng']): number[] {
+  switch (mode) {
+    case 'boxes':
+      return [0, 0, 0, 0];
+    case 'spheres':
+      return [1, 1, 1, 1];
+    case 'mixed-3d':
+      return [0, 1, 2, rng.int(3)];
+    case 'mixed':
+    default:
+      return [rng.int(2), rng.int(2), rng.int(2), rng.int(2)];
+  }
+}
+
+/** windchime arrangementOffsets — per-object [x,y,z] as fractions of min(w,h). */
+function arrangementOffsets(mode: string): Array<[number, number, number]> {
+  switch (mode) {
+    case 'stacked':
+      return [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+      ];
+    case 'circle':
+      return [0, 1, 2, 3].map((i) => {
+        const a = (i / 4) * TWO_PI;
+        return [Math.cos(a) * 0.28, Math.sin(a) * 0.28, 0] as [number, number, number];
+      });
+    case 'scattered':
+      return [
+        [-0.25, -0.18, 0],
+        [0.22, -0.22, 0.08],
+        [-0.2, 0.24, -0.05],
+        [0.26, 0.16, 0.04],
+      ];
+    case 'horizontal':
+    default:
+      return [0, 1, 2, 3].map((i) => [(i - 1.5) * 0.24, 0, 0] as [number, number, number]);
+  }
+}
 
 export const monomeArcgridcombo: VisualTemplate = {
   id: 'monomeArcgridcombo',
   name: 'Arc + Grid Combo',
   family: 'sequencer',
   description:
-    '16-step grid sequencer triggering four arc-driven rotating 3D objects. The Grid 128 / Arc 4 idiom showcase.',
+    '16-step grid sequencer flashing scanlines under the play-head while four arc-driven 3D objects spin. The Grid 128 / Arc 4 step-sequencer idiom showcase.',
   tags: ['sequencer', 'step', 'arc', 'rotation', '3d', 'rhythmic', 'percussive', 'monome'],
   defaultParams: { motion: 0.5, turbulence: 0.5, density: 0.5, contrast: 0.6, palette: 0.3 },
   renderer: 'webgl',
-  sourceLineage: 'windchime monomeArcgridcombo (Monome_arcgridcombo.pde)',
+  sourceLineage: 'windchime monomeArcgridcombo (Monome_arcgridcombo.pde, faithful port)',
   hardwareTarget: { grid: '128', arc: '4' },
   idioms: ['stepSequencer', 'arcMacros'],
+  gestural: {
+    name: 'Step Sequencer + Arc Rotation',
+    summary:
+      'A 16-step grid sequencer (8 on a Grid 64): rows 0–5 toggle steps, row 7 cuts the play position / latches a loop. Each lane firing under the play-head flashes a scanline. Arc encoders spin one 3D object each (turn = spin up, press = stop); the rings show rotation phase. On an Arc 2 each encoder covers two objects.',
+    grid: [
+      { area: 'grid rows 0–5, any column', action: 'press', effect: 'toggle a step on/off at (col, row)' },
+      { area: 'grid row 7, any column', action: 'single press', effect: 'cut the play position to that column' },
+      { area: 'grid row 7, two columns held', action: 'press second while first held', effect: 'set loop start + end' },
+    ],
+    arc: [
+      { area: 'arc enc 0–3', action: 'turn', effect: "spin up that object's rotation (impulse → free-wheeling velocity)" },
+      { area: 'arc enc 0–3', action: 'press', effect: "stop that object's rotation" },
+    ],
+  },
   variants,
 
   create(ctx: MountContext) {
-    const paletteName = cfg<string>(ctx.config, 'palette', 'warm');
-    const objectsMode = cfg<string>(ctx.config, 'objects', 'mixed');
-    const arrangement = cfg<string>(ctx.config, 'arrangement', 'row');
+    const paletteMode = cfg<string>(ctx.config, 'palette', 'random');
+    const kindsMode = cfg<string>(ctx.config, 'objectKinds', 'mixed');
+    const arrangeMode = cfg<string>(ctx.config, 'arrangement', 'horizontal');
+    const timing = cfg<string>(ctx.config, 'stepTiming', 'steady-50');
     const arcLed = cfg<ArcLedPolicy>(ctx.config, 'arcLed', 'comet');
-    const tempo = cfg<string>(ctx.config, 'tempo', 'steady');
 
     let profile: IdiomProfile = profileFromSetup(ctx.setup);
-    const seq: StepSequencer = createStepSequencer();
+    const seq: StepSequencer = createStepSequencer(); // 6 lanes, steps == cols
     const arc: ArcMacros = createArcMacros({
       encoders: [0, 1, 2, 3].map((i) => ({
         name: `spin${i}`,
-        initial: 0.56,
+        mode: 'velocity',
+        damping: 1, // free wheel — a press stops it (windchime resets rotationSpeed)
+        impulse: SPIN_IMPULSE,
         led: arcLed,
-        onPress: () => arc.set(`spin${i}`, 0.5), // press = stop
+        velocityTrail: false, // honor the arcLed phase policy
+        onPress: () => arc.setVelocity(`spin${i}`, 0),
       })),
     });
     const idioms: ComposedIdiom = composeIdioms([seq, arc]);
     idioms.setProfile(profile);
+    for (let i = 0; i < 4; i++) arc.setVelocity(`spin${i}`, SEED_SPIN); // gentle mount spin
 
-    const palette = PALETTES[paletteName] ?? (PALETTES.warm as number[][]);
-    const kinds = [0, 1, 2, 3].map(() => {
-      if (objectsMode === 'boxes') return 0;
-      if (objectsMode === 'spheres') return 1;
-      if (objectsMode === 'tori') return 2;
-      return ctx.rng.int(3); // mixed
-    });
+    const colors = paletteColors4(paletteMode, ctx.rng);
+    const kinds = objectKinds4(kindsMode, ctx.rng);
+    const offsets = arrangementOffsets(arrangeMode);
 
-    const phase = [0, 0, 0, 0];
-    const pulse = [0, 0, 0, 0];
-    let stepClock = 0;
+    const angle = [0, 0, 0, 0]; // unbounded rotation accumulator (turns)
+    const laneFlash: number[] = []; // per-lane scanline brightness 0..1
+    let stepTimer = 0; // frames since the last advance
+    let stepsThisCycle = 0;
+    let useAlt = false; // half-half toggles the step time every 16 steps
     let userEdited = false;
     let cur: VisualParamVector = ctx.initialParams;
 
-    /** A sparse default pattern, scaled to the current step count, so the scene
-     *  plays on mount and re-seeds across a hot-swap until the performer edits. */
+    /** A sparse default pattern so the sequencer plays on mount (clearable). */
     function seedPattern(): void {
       seq.reset?.();
       const steps = seq.values().steps;
@@ -124,24 +193,10 @@ export const monomeArcgridcombo: VisualTemplate = {
     }
     seedPattern();
 
-    const baseInterval = (): number => (tempo === 'fast' ? 0.09 : tempo === 'slow' ? 0.26 : 0.15);
-
-    /** Object world position for the arrangement variant (object i of 4). */
-    function position(i: number, spread: number): [number, number, number] {
-      switch (arrangement) {
-        case 'arc': {
-          const a = lerp(-Math.PI * 0.5, Math.PI * 0.5, i / 3);
-          return [Math.sin(a) * spread, -Math.cos(a) * spread * 0.4, Math.cos(a) * spread * 0.3];
-        }
-        case 'depth':
-          return [(i - 1.5) * spread * 0.4, 0, (i - 1.5) * spread];
-        case 'cluster':
-          return [(i % 2 === 0 ? -1 : 1) * spread * 0.4, (i < 2 ? -1 : 1) * spread * 0.4, 0];
-        case 'row':
-        default:
-          return [(i - 1.5) * spread, 0, 0];
-      }
-    }
+    const currentStepFrames = (): number => {
+      if (timing === 'half-half') return useAlt ? 75 : 25;
+      return stepFramesFor(timing);
+    };
 
     return {
       setup(p): void {
@@ -167,58 +222,68 @@ export const monomeArcgridcombo: VisualTemplate = {
       },
 
       draw({ p, width, height, dt }): void {
+        const frames = dt * 60;
+        arc.tick(dt * 1000); // integrate the spin velocities → ring phase
         const minDim = Math.min(width, height);
-        const spread = minDim * 0.26;
-        const size = minDim * 0.12;
+        const size = minDim * 0.1;
+        const spinScale = lerp(0.6, 1.5, cur.turbulence); // turbulence rides the spin
 
-        // step clock — motion rides the tempo (faster when motion is high)
-        stepClock += dt;
-        const interval = baseInterval() * lerp(1.7, 0.45, cur.motion);
-        let triggered = false;
-        if (stepClock >= interval) {
-          stepClock = 0;
+        // step clock — frame-count timing, motion nudges the rate (faster when high)
+        stepTimer += frames * lerp(1.4, 0.7, cur.motion);
+        if (stepTimer >= currentStepFrames()) {
+          stepTimer = 0;
           seq.advance();
           const active = seq.values().active;
           for (let lane = 0; lane < active.length; lane++) {
-            if (active[lane]) {
-              const obj = lane % 4;
-              pulse[obj] = 1;
-              triggered = true;
-            }
+            if (active[lane]) laneFlash[lane] = 1;
+          }
+          stepsThisCycle++;
+          if (timing === 'half-half' && stepsThisCycle >= 16) {
+            useAlt = !useAlt;
+            stepsThisCycle = 0;
           }
         }
 
-        const flash = triggered ? 18 : 0;
-        p.background(6 + flash, 6 + flash, 9 + flash);
-        p.ambientLight(48);
-        p.directionalLight(255, 255, 255, 0.2, 0.4, -1);
-        p.pointLight(180, 200, 255, 0, -spread, spread);
+        p.background(0);
+        p.ambientLight(50);
+        p.directionalLight(255, 255, 255, 0, 0, -1);
 
-        const av = arc.values();
+        // four spinning solid objects — rotation locked to each arc ring's phase
         for (let i = 0; i < 4; i++) {
-          const speed = ((av[`spin${i}`] ?? 0.5) - 0.5) * 2 * MAX_SPEED * (0.5 + cur.turbulence);
-          phase[i] = (phase[i] ?? 0) + speed * dt * 60;
-          pulse[i] = (pulse[i] ?? 0) * 0.9;
-          const [px, py, pz] = position(i, spread);
-          const c = palette[i] ?? [220, 220, 220];
-          const boost = 1 + (pulse[i] ?? 0) * 0.6;
-          const s = size * (1 + (pulse[i] ?? 0) * 0.35);
+          angle[i] = (angle[i] ?? 0) + arc.velocity(`spin${i}`) * frames * spinScale;
+          const off = offsets[i] ?? [0, 0, 0];
+          const c = colors[i] ?? [255, 255, 255];
+          const a = angle[i] ?? 0;
           p.push();
-          p.translate(px, py, pz);
-          p.rotateY(phase[i] ?? 0);
-          p.rotateX((phase[i] ?? 0) * 0.6);
+          p.translate(off[0] * minDim, off[1] * minDim, off[2] * minDim);
+          p.rotateY(a * TWO_PI);
+          p.rotateX(a * TWO_PI * 0.6);
           p.noStroke();
-          p.fill(
-            Math.min(255, (c[0] ?? 0) * boost),
-            Math.min(255, (c[1] ?? 0) * boost),
-            Math.min(255, (c[2] ?? 0) * boost),
-          );
+          p.fill(c[0], c[1], c[2]);
           const kind = kinds[i] ?? 0;
-          if (kind === 0) p.box(s);
-          else if (kind === 1) p.sphere(s * 0.6);
-          else p.torus(s * 0.6, s * 0.22);
+          if (kind === 0) p.box(size);
+          else if (kind === 1) p.sphere(size * 0.6);
+          else p.torus(size * 0.55, size * 0.2);
           p.pop();
         }
+
+        // step-trigger scanlines — a white line per lane firing under the play-head
+        const laneCount = seq.values().laneRows;
+        p.push();
+        p.translate(-width / 2, -height / 2, 0);
+        for (let lane = 0; lane < laneCount; lane++) {
+          const f = laneFlash[lane] ?? 0;
+          if (f <= 0.02) {
+            laneFlash[lane] = 0;
+            continue;
+          }
+          const y = height * (0.12 + 0.76 * (laneCount > 1 ? lane / (laneCount - 1) : 0.5));
+          p.stroke(255, 255 * f * (0.6 + cur.contrast * 0.4));
+          p.strokeWeight(2);
+          p.line(width * 0.04, y, width * 0.96, y);
+          laneFlash[lane] = f * 0.82; // decay
+        }
+        p.pop();
 
         idioms.renderGrid(ctx.ledOut, profile);
         idioms.renderArc(ctx.ledOut, profile);

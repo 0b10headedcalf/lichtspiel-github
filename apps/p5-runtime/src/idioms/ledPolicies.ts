@@ -33,6 +33,17 @@ export function headLed(value01: number, ringLeds: number): number {
   return Math.round(clamp01(value01) * (ringLeds - 1));
 }
 
+/**
+ * value 0..1 as a WRAPPING phase → the orbiting head LED index. Unlike `headLed`
+ * (which clamps + spans 0..ringLeds-1), this wraps so phase 1 maps back to 0 — the
+ * windchime phase-comet idiom (`center = floor(phase * 64) % 64`).
+ */
+export function phaseHead(value01: number, ringLeds: number): number {
+  const frac = value01 - Math.floor(value01); // 0..1
+  const h = Math.floor(frac * ringLeds) % ringLeds;
+  return h < 0 ? h + ringLeds : h;
+}
+
 /** value 0..1 → a count of lit LEDs (0..ringLeds), for fill-style arcs. */
 export function fillCount(value01: number, ringLeds: number): number {
   return Math.round(clamp01(value01) * ringLeds);
@@ -78,7 +89,20 @@ export function cellLevel(level: number): number {
 }
 
 // ── arc ring policies ─────────────────────────────────────────────
-export type ArcLedPolicy = 'fill' | 'comet' | 'gauge' | 'marker' | 'segments' | 'playhead' | 'inverse';
+export type ArcLedPolicy =
+  | 'fill'
+  | 'comet'
+  | 'gauge'
+  | 'marker'
+  | 'segments'
+  | 'playhead'
+  | 'inverse'
+  // phase-comet policies (windchime monomeArcgridcombo arcLed variants) — the
+  // value is read as a WRAPPING rotation phase, not a 0..1 fill amount.
+  | 'spot'
+  | 'sweep'
+  | 'bar'
+  | 'opposing';
 
 /** Solid fill from 12 o'clock up to the value (windchime `fill`). */
 export function fillRingLevel(i: number, value01: number, ringLeds: number): number {
@@ -139,6 +163,48 @@ export function playheadRingLevel(i: number, value01: number, ringLeds: number):
   return clampLevel(level);
 }
 
+// ── phase-comet policies (windchime monomeArcgridcombo) ──────────────
+// These read `value01` as a wrapping rotation phase and orbit an animated
+// head/comet, rather than filling from 12 o'clock. Faithful ports of the
+// `writeArcLeds` switch in windchime-animation monomeArcgridcombo/index.ts.
+
+/** Single bright LED at the orbiting phase head (windchime `spot`). */
+export function spotRingLevel(i: number, value01: number, ringLeds: number): number {
+  return i === phaseHead(value01, ringLeds) ? LED_LEVEL_MAX : 0;
+}
+
+/** A 16-LED bar trailing the orbiting head, fading 15→0 (windchime `sweep`). */
+export function sweepRingLevel(i: number, value01: number, ringLeds: number): number {
+  const head = phaseHead(value01, ringLeds);
+  const behind = (head - i + ringLeds) % ringLeds; // 0 at head, grows trailing
+  return behind < 16 ? clampLevel(LED_LEVEL_MAX - behind) : 0;
+}
+
+/** Bright head triad + dim opposite triad 180° away (windchime `bar`). */
+export function barRingLevel(i: number, value01: number, ringLeds: number): number {
+  const head = phaseHead(value01, ringLeds);
+  const opp = (head + Math.floor(ringLeds / 2)) % ringLeds;
+  if (circDist(i, head, ringLeds) <= 1) return LED_LEVEL_MAX;
+  if (circDist(i, opp, ringLeds) <= 1) return 8;
+  return 0;
+}
+
+/** Bright comet + dim counter-rotating comet 180° off (windchime `opposing`). */
+export function opposingRingLevel(i: number, value01: number, ringLeds: number): number {
+  const head = phaseHead(value01, ringLeds);
+  const brightTail = [15, 12, 8, 4, 2];
+  const dimTail = [6, 5, 3, 2, 1];
+  let level = 0;
+  for (let k = 0; k < brightTail.length; k++) {
+    if ((head - k + ringLeds) % ringLeds === i) level = Math.max(level, brightTail[k] ?? 0);
+  }
+  const mirror = (ringLeds - head) % ringLeds;
+  for (let k = 0; k < dimTail.length; k++) {
+    if ((mirror + k) % ringLeds === i) level = Math.max(level, dimTail[k] ?? 0);
+  }
+  return clampLevel(level);
+}
+
 /** Dispatch a ring policy by name. */
 export function arcRingLevel(
   policy: ArcLedPolicy,
@@ -159,6 +225,14 @@ export function arcRingLevel(
       return playheadRingLevel(i, value01, ringLeds);
     case 'inverse':
       return inverseRingLevel(i, value01, ringLeds);
+    case 'spot':
+      return spotRingLevel(i, value01, ringLeds);
+    case 'sweep':
+      return sweepRingLevel(i, value01, ringLeds);
+    case 'bar':
+      return barRingLevel(i, value01, ringLeds);
+    case 'opposing':
+      return opposingRingLevel(i, value01, ringLeds);
     case 'comet':
     default:
       return cometRingLevel(i, value01, ringLeds);

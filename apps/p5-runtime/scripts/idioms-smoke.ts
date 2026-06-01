@@ -291,12 +291,89 @@ function checkArcFolding(): void {
   ok(f4.join(',') === '0,0', `Arc 4: enc0 stays 1:1 — always logical 0 (got ${f4.join(',')})`);
 }
 
+// arcMacros VELOCITY mode — roulette physics (windchime itoBoxV9 / monomeArcgridcombo):
+// a delta is an IMPULSE into a damped angular velocity the host integrates via tick().
+function checkVelocityMode(): void {
+  console.log('\n[arc velocity mode]');
+  const arc4 = profileFromSetup({ grid: null, arc: ARC_4 });
+
+  // roulette encoder: damped + a velocity-proportional ring trail.
+  const r = createArcMacros({
+    encoders: [{ name: 'spin', mode: 'velocity', damping: 0.9, velocityTrail: true, impulse: 0.01 }],
+  });
+  r.setProfile(arc4);
+  const phase0 = r.values().spin;
+  r.onArcDelta(ad(0, 20));
+  ok(r.velocity('spin') > 0, 'velocity: a delta raises the angular velocity');
+  ok(r.values().spin === phase0, 'velocity: phase does not move until tick()');
+  r.tick(16);
+  ok(r.values().spin !== phase0, 'velocity: tick() advances the phase by the velocity');
+  const v1 = r.velocity('spin');
+  r.tick(16);
+  r.tick(16);
+  ok(r.velocity('spin') < v1 && r.velocity('spin') > 0, 'velocity: damping<1 decays the spin');
+  r.setVelocity('spin', 0);
+  ok(r.velocity('spin') === 0, 'velocity: setVelocity(0) stops the spin (press-reset)');
+
+  // free wheel: damping 1 never decays (windchime combo — a press resets it instead).
+  const free = createArcMacros({ encoders: [{ name: 'w', mode: 'velocity', damping: 1, impulse: 0.01 }] });
+  free.setProfile(arc4);
+  free.onArcDelta(ad(0, 10));
+  const fv = free.velocity('w');
+  free.tick(16);
+  free.tick(16);
+  ok(Math.abs(free.velocity('w') - fv) < 1e-9, 'velocity: damping=1 is a free wheel (no decay)');
+
+  // clamp integrate: a bounded accumulator (zoom) never leaves [0,1].
+  const z = createArcMacros({
+    encoders: [{ name: 'zoom', mode: 'velocity', integrate: 'clamp', damping: 1, impulse: 0.1 }],
+  });
+  z.setProfile(arc4);
+  z.onArcDelta(ad(0, 50)); // large positive impulse
+  for (let k = 0; k < 100; k++) z.tick(16);
+  const zp = z.values().zoom;
+  ok(zp >= 0 && zp <= 1, `velocity: integrate:'clamp' bounds the phase to [0,1] (got ${zp.toFixed(3)})`);
+
+  // velocityTrail: a faster spin lights a longer comet tail than a slow one.
+  const slow = createArcMacros({ encoders: [{ name: 's', mode: 'velocity', velocityTrail: true, damping: 1, impulse: 0.001 }] });
+  const fast = createArcMacros({ encoders: [{ name: 'f', mode: 'velocity', velocityTrail: true, damping: 1, impulse: 0.05 }] });
+  slow.setProfile(arc4);
+  fast.setProfile(arc4);
+  slow.onArcDelta(ad(0, 4));
+  fast.onArcDelta(ad(0, 20));
+  const fs = createLedFrame();
+  const ff = createLedFrame();
+  slow.renderArc(fs, arc4);
+  fast.renderArc(ff, arc4);
+  ok(ringSum(fs, 0) > 0, 'velocity: trail ring lights');
+  ok(ringSum(ff, 0) > ringSum(fs, 0), 'velocity: a faster spin lights a longer trail');
+}
+
+// the windchime monomeArcgridcombo arc LED policies (phase comets) render lit rings.
+function checkPhasePolicies(): void {
+  console.log('\n[arc phase-comet policies]');
+  const arc4 = profileFromSetup({ grid: null, arc: ARC_4 });
+  for (const led of ['spot', 'sweep', 'bar', 'opposing'] as const) {
+    const a = createArcMacros({ encoders: [{ name: 'p', mode: 'relative', led }] });
+    a.setProfile(arc4);
+    a.set('p', 0.33); // a mid rotation phase
+    const f = createLedFrame();
+    a.renderArc(f, arc4);
+    const ring = f.arc[0] ?? [];
+    const lit = ring.filter((l) => l > 0).length;
+    const inRange = ring.every((l) => l >= 0 && l <= 15);
+    ok(lit > 0 && inRange, `arcLed '${led}' renders a lit, in-range ring (${lit} LEDs)`);
+  }
+}
+
 // ── run ───────────────────────────────────────────────────────────
 console.log('idioms-smoke — capability-aware monome idiom library');
 checkProfile('grid64/arc2', { grid: GRID_64, arc: ARC_2 });
 checkProfile('grid128/arc4', { grid: GRID_128, arc: ARC_4 });
 checkPushGating();
 checkArcFolding();
+checkVelocityMode();
+checkPhasePolicies();
 
 if (failures > 0) {
   console.error(`\n${failures}/${checks} idiom check(s) failed`);
