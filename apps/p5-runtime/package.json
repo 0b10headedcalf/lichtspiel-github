@@ -9,8 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "smoke": "node ./scripts/smoke.mjs",
-    "test": "node ./scripts/smoke.mjs"
+    "smoke": "node ./scripts/smoke.mjs && tsx ./scripts/idioms-smoke.ts",
+    "test": "node ./scripts/smoke.mjs && tsx ./scripts/idioms-smoke.ts"
   },
   "dependencies": {
     "@lichtspiel/schemas": "workspace:*",
@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@types/p5": "^1.7.6",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"
   }
