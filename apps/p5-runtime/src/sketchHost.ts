@@ -9,6 +9,7 @@ import p5 from 'p5';
 import {
   type ArcDeltaEvent,
   type ArcKeyEvent,
+  type GesturalControlMap,
   type GridKeyEvent,
   type LedFrame,
   type LiveSessionState,
@@ -16,6 +17,7 @@ import {
   type VisualParamVector,
   DEFAULT_PARAMS as DEFAULTS,
   createLedFrame,
+  describeSetup,
   lerpParams,
   mergeParams,
 } from '@lichtspiel/schemas';
@@ -155,6 +157,18 @@ export class SketchHost {
       this.sketch?.setProfile?.(setup);
     } catch (err) {
       console.error('[host] sketch.setProfile threw', err);
+    }
+  }
+
+  /** The active sketch's live control map for the connected hardware (or null). */
+  describeControls(): GesturalControlMap | null {
+    try {
+      const map = this.sketch?.controlMap?.(this.setup);
+      if (!map) return null;
+      return { hardware: describeSetup(this.setup), grid: map.grid, arc: map.arc };
+    } catch (err) {
+      console.error('[host] sketch.controlMap threw', err);
+      return null;
     }
   }
 

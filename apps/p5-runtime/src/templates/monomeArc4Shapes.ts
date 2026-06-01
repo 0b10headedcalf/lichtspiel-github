@@ -188,17 +188,21 @@ export const monomeArc4Shapes: VisualTemplate = {
     // exactly the windchime Grid-128 layout; the first 8 reach strobes 0-1 on a
     // Grid 64. Initial 4/7 mirrors the windchime sliderLevel default of 4.
     const lanes = [0, 1, 2, 3].flatMap((s) =>
-      ['opacity', 'gap', 'random', 'origin'].map((p) => ({ name: `s${s}${p}`, initial: 4 / 7 })),
+      ['opacity', 'gap', 'random', 'origin'].map((p) => ({ name: `s${s}${p}`, label: `strobe ${s} ${p}`, initial: 4 / 7 })),
     );
     const fb: FaderBank = createFaderBank({ spread: false, lanes });
 
     // enc0 = movement intensity (comet); enc1-3 = object size + playhead speed
     // (playhead). A press regenerates that object + all strobe colours + bg.
+    // turn couples on an Arc 2 (enc1 then drives objects 1 + 3's size, the rest
+    // reachable in pairs); rings already keep notches (comet ticks / playhead markers).
     const arc: ArcMacros = createArcMacros({
       encoders: [
-        { name: 'movement', initial: 1.0, led: 'comet', onPress: () => regen(0) },
+        { name: 'movement', label: 'movement intensity', pressLabel: 'regenerate obj 0 + strobes', initial: 1.0, led: 'comet', onPress: () => regen(0) },
         ...[1, 2, 3].map((i) => ({
           name: `shape${i}`,
+          label: `object ${i} size / speed`,
+          pressLabel: `regenerate object ${i} + strobes`,
           initial: 0.5,
           led: 'playhead' as const,
           onPress: () => regen(i),
@@ -504,6 +508,7 @@ export const monomeArc4Shapes: VisualTemplate = {
         profile = profileFromSetup(setup);
         idioms.setProfile(profile);
       },
+      controlMap: (setup) => idioms.describe(profileFromSetup(setup)),
       onGridKey(e): void {
         idioms.onGridKey?.(e);
       },

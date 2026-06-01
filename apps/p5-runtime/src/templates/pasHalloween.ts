@@ -143,7 +143,10 @@ export const pasHalloween: VisualTemplate = {
       { area: 'arc encoder 1', action: 'turn', effect: 'hue shift across the active palette' },
       { area: 'arc encoder 2', action: 'turn', effect: 'element lifespan multiplier (slower fade)' },
       { area: 'arc encoder 3', action: 'turn', effect: 'position-jitter amplitude on drifting elements' },
-      { area: 'arc encoders 0-3', action: 'press', effect: "reset that encoder's channel to its identity (trail 1× / hue 0 / lifespan 1× / jitter 1×)" },
+      { area: 'arc encoder 0', action: 'press', effect: 'clear the field (wipe all elements)' },
+      { area: 'arc encoder 1', action: 'press', effect: 'spawn a burst of elements' },
+      { area: 'arc encoder 2', action: 'press', effect: 'thin the swarm (cull half)' },
+      { area: 'arc encoder 3', action: 'press', effect: 'scatter the elements' },
     ],
   },
   variants,
@@ -169,12 +172,15 @@ export const pasHalloween: VisualTemplate = {
 
     // ── idioms (the control map) ───────────────────────────────────
     const seq: StepSequencer = createStepSequencer({ steps: 16 }); // 16 steps; pages on a Grid 64
+    // Each arc PRESS is a distinct, thematic event on the element swarm (not a uniform
+    // reset). On an Arc 2 the turns couple (enc0 → trail+lifespan, enc1 → hue+jitter) and
+    // the presses cycle, so all four events stay reachable.
     const arc: ArcMacros = createArcMacros({
       encoders: [
-        { name: 'trail', mode: 'absolute', initial: TRAIL_MID, led: 'fill', onPress: () => arc.set('trail', TRAIL_MID) },
-        { name: 'hue', mode: 'absolute', initial: HUE_MID, led: 'fill', onPress: () => arc.set('hue', HUE_MID) },
-        { name: 'lifespan', mode: 'absolute', initial: LIFE_MID, led: 'fill', onPress: () => arc.set('lifespan', LIFE_MID) },
-        { name: 'jitter', mode: 'absolute', initial: JIT_MID, led: 'fill', onPress: () => arc.set('jitter', JIT_MID) },
+        { name: 'trail', label: 'motion-trail strength', pressLabel: 'clear the field', mode: 'absolute', initial: TRAIL_MID, led: 'fillNotched', onPress: () => (elements.length = 0) },
+        { name: 'hue', label: 'palette hue shift', pressLabel: 'spawn a burst', mode: 'absolute', initial: HUE_MID, led: 'fillNotched', onPress: () => { for (let i = 0; i < 8; i++) spawnElement(centerX, centerY); } },
+        { name: 'lifespan', label: 'element lifespan', pressLabel: 'thin the swarm', mode: 'absolute', initial: LIFE_MID, led: 'fillNotched', onPress: () => elements.splice(0, Math.floor(elements.length / 2)) },
+        { name: 'jitter', label: 'position jitter', pressLabel: 'scatter the elements', mode: 'absolute', initial: JIT_MID, led: 'fillNotched', onPress: () => { for (const el of elements) { el.x += ctx.rng.range(-1, 1) * 220; el.y += ctx.rng.range(-1, 1) * 220; } } },
       ],
     });
     const idioms: ComposedIdiom = composeIdioms([seq, arc]);
@@ -190,6 +196,8 @@ export const pasHalloween: VisualTemplate = {
     let stepTimer = 0; // frames since the last advance
     let userEdited = false;
     let cur: VisualParamVector = ctx.initialParams;
+    let centerX = ctx.width / 2; // live canvas centre (updated each frame) for arc-press spawns
+    let centerY = ctx.height / 2;
 
     /** A sparse default pattern (windchime ships grid-only / blank, but the
      *  digital twin should play on mount). Re-fits across a hot-swap until edited. */
@@ -296,6 +304,7 @@ export const pasHalloween: VisualTemplate = {
         idioms.setProfile(profile);
         if (!userEdited) seedPattern(); // re-fit the default pattern to the new width
       },
+      controlMap: (setup) => idioms.describe(profileFromSetup(setup)),
 
       onGridKey(e): void {
         userEdited = true;
@@ -312,6 +321,8 @@ export const pasHalloween: VisualTemplate = {
         const frames = dt * 60;
         const cx = width / 2;
         const cy = height / 2;
+        centerX = cx; // keep the arc-press spawns at the live canvas centre
+        centerY = cy;
         const sx = width / WC_W; // scale windchime authoring px → live canvas
         const sy = height / WC_H;
         const s = Math.min(sx, sy); // isotropic scale for sizes/lengths

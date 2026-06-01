@@ -13,8 +13,8 @@
  * `values()` returns a name→0..1 map a sketch folds into its params.
  */
 
-import { type GridKeyEvent, type LedFrame, clamp01 } from '@lichtspiel/schemas';
-import type { Idiom, IdiomProfile } from './types.js';
+import { type GesturalEntry, type GridKeyEvent, type LedFrame, clamp01 } from '@lichtspiel/schemas';
+import type { Idiom, IdiomControlMap, IdiomProfile } from './types.js';
 import { EMPTY_PROFILE } from './types.js';
 import { faderBarLevel } from './ledPolicies.js';
 
@@ -22,6 +22,8 @@ export type FaderMode = 'continuous' | 'select' | 'toggle';
 
 export interface FaderLane {
   name: string;
+  /** Human-readable description of this fader's role (for the gestural panel). */
+  label?: string;
   mode?: FaderMode;
   /** initial normalized value 0..1 (default 0.5). */
   initial?: number;
@@ -44,6 +46,7 @@ export interface FaderBank extends Idiom<FaderValues> {
 
 interface LaneState {
   name: string;
+  label?: string;
   mode: FaderMode;
   steps: number;
   value: number; // canonical normalized 0..1 for every mode
@@ -55,6 +58,7 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
   let profile: IdiomProfile = EMPTY_PROFILE;
   const lanes: LaneState[] = opts.lanes.map((l) => ({
     name: l.name,
+    label: l.label,
     mode: l.mode ?? 'continuous',
     steps: Math.max(2, l.steps ?? 2),
     value: clamp01(l.initial ?? 0.5),
@@ -151,6 +155,30 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
       if (!lane) return;
       lane.value = clamp01(value01);
       if (lane.mode === 'toggle') lane.step = Math.round(lane.value * (lane.steps - 1));
+    },
+
+    describe(p: IdiomProfile): IdiomControlMap {
+      const cols = Math.max(1, p.cols);
+      const grid: GesturalEntry[] = [];
+      const laneLabel = (i: number): string => lanes[i]?.label ?? lanes[i]?.name ?? `fader ${i}`;
+      let prevKey = '';
+      for (let x = 0; x < cols; x++) {
+        const covered = coveredLanes(x, cols);
+        if (covered.length === 0) {
+          prevKey = '';
+          continue; // a spare / scene-select column
+        }
+        const key = covered.join(',');
+        if (key === prevKey) continue; // same spread panel — describe once
+        prevKey = key;
+        const coupled = covered.length > 1;
+        grid.push({
+          area: spread ? `panel @ col ${x}` : `col ${x}`,
+          action: 'press a row',
+          effect: covered.map(laneLabel).join(' + ') + (coupled ? ' · coupled' : ''),
+        });
+      }
+      return { grid, arc: [] };
     },
 
     setProfile(p: IdiomProfile): void {

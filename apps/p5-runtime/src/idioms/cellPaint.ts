@@ -17,7 +17,7 @@
  */
 
 import { type GridKeyEvent, type LedFrame, clamp01 } from '@lichtspiel/schemas';
-import type { Idiom, IdiomProfile } from './types.js';
+import type { Idiom, IdiomControlMap, IdiomProfile } from './types.js';
 import { EMPTY_PROFILE } from './types.js';
 import { cellLevel } from './ledPolicies.js';
 
@@ -133,6 +133,19 @@ export function createCellPaint(opts: CellPaintOptions = {}): CellPaint {
         cells.push(row);
       }
       return { cells, mean: count ? sum / count : 0 };
+    },
+
+    describe(p: IdiomProfile): IdiomControlMap {
+      return {
+        grid: [
+          {
+            area: `any cell (${Math.max(0, p.rows)}×${Math.max(0, p.cols)})`,
+            action: 'press / idle',
+            effect: 'press cycles a cell 0→max + freezes it; idle cells flicker',
+          },
+        ],
+        arc: [],
+      };
     },
 
     setProfile(p: IdiomProfile): void {

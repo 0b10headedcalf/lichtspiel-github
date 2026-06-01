@@ -180,10 +180,10 @@ export const parquetDeformation: VisualTemplate = {
     const seq: StepSequencer = createStepSequencer({ steps: SEQ_STEPS });
     const arc: ArcMacros = createArcMacros({
       encoders: [
-        { name: 'zoom', mode: 'absolute', led: 'fill', initial: ZOOM_MID, onPress: () => arc.set('zoom', ZOOM_MID) },
-        { name: 'bgTilt', mode: 'absolute', led: 'fill', initial: BGTILT_MID, onPress: () => arc.set('bgTilt', BGTILT_MID) },
-        { name: 'fgTilt', mode: 'absolute', led: 'fill', initial: FGTILT_MID, onPress: () => arc.set('fgTilt', FGTILT_MID) },
-        { name: 'overlayY', mode: 'absolute', led: 'fill', initial: OVERLAY_MID, onPress: () => arc.set('overlayY', OVERLAY_MID) },
+        { name: 'zoom', label: 'camera zoom', pressLabel: 'reset zoom', mode: 'absolute', led: 'fillNotched', initial: ZOOM_MID, onPress: () => arc.set('zoom', ZOOM_MID) },
+        { name: 'bgTilt', label: 'bg-mesh tilt', pressLabel: 'reset bg tilt', mode: 'absolute', led: 'fillNotched', initial: BGTILT_MID, onPress: () => arc.set('bgTilt', BGTILT_MID) },
+        { name: 'fgTilt', label: 'fg-mesh tilt', pressLabel: 'reset fg tilt', mode: 'absolute', led: 'fillNotched', initial: FGTILT_MID, onPress: () => arc.set('fgTilt', FGTILT_MID) },
+        { name: 'overlayY', label: 'object overlay Y', pressLabel: 'reset overlay', mode: 'absolute', led: 'fillNotched', initial: OVERLAY_MID, onPress: () => arc.set('overlayY', OVERLAY_MID) },
       ],
     });
     const idioms: ComposedIdiom = composeIdioms([seq, arc]);
@@ -360,6 +360,7 @@ export const parquetDeformation: VisualTemplate = {
         idioms.setProfile(profile);
         if (!userEdited) seedPattern(); // re-fit the default pattern across a hot-swap
       },
+      controlMap: (setup) => idioms.describe(profileFromSetup(setup)),
 
       onGridKey(e): void {
         userEdited = true;

@@ -8,12 +8,24 @@
  * Each LOGICAL encoder turns a normalized value (absolute = clamp 0..1, relative
  * = wrap e.g. a rotation phase, velocity = roulette physics) and can fire a press
  * action. A sketch declares the logical encoders it was designed for (often 4).
- * On hardware with FEWER physical encoders, the presses **fold**: physical encoder
- * `p` covers logical encoders {p, p+P, p+2P, …} (P = physical count) and each press
- * cycles through the covered ones that have an action — so a 4-encoder sketch keeps
- * all four press-actions reachable on an Arc 2 (each encoder cycles through its pair).
- * Turn + LED stay 1:1 with the physical encoder's primary logical. On an Arc 4
- * the mapping is 1:1 (original intact). Pure control/LED — owns no grid, draws nothing.
+ * On hardware with FEWER physical encoders the controls **fold** (mirroring the
+ * faderBank grid-fold), so a 4-encoder sketch stays fully controllable on an Arc 2:
+ *
+ *   • `fold: 'couple'` (default) — physical encoder `p` drives logical encoders
+ *     {p, p+P, p+2P, …} (P = physical count) TOGETHER on TURN (all get the same
+ *     delta), so e.g. enc0 scales objects 0 + 2 and enc1 scales 1 + 3 — no object
+ *     is left unreachable. The PRESS then either `coupledPress: 'cycle'` (default —
+ *     each press cycles through the covered logical actions, e.g. regenerate obj0
+ *     then obj2) or `coupledPress: 'all'` (every covered action fires, e.g. stop
+ *     both). The ring shows the primary logical (`p`).
+ *   • `fold: 'page'` — for sketches whose encoders are DISTINCT axes that shouldn't
+ *     be paired (itoBox yaw/pitch/roll/zoom). The P physical encoders map to one
+ *     PAGE of logical at a time; a CHORD (press one encoder while another is held)
+ *     flips to the next page (and suppresses the two single presses). All logical
+ *     reachable across pages; turn + press + ring follow the current page.
+ *
+ * On an Arc 4 (P ≥ logical count) the mapping is 1:1 (original intact). Pure
+ * control/LED — owns no grid, draws nothing.
  *
  * VELOCITY mode (windchime itoBoxV9 "roulette" + monomeArcgridcombo spin): a delta
  * is an IMPULSE into a damped angular velocity, not a direct value set. The host
@@ -24,13 +36,17 @@
  * with |velocity|. `integrate: 'clamp'` bounds the phase instead of wrapping (zoom).
  */
 
-import { type ArcDeltaEvent, type ArcKeyEvent, type LedFrame, clamp01 } from '@lichtspiel/schemas';
-import type { Idiom, IdiomProfile } from './types.js';
+import { type ArcDeltaEvent, type ArcKeyEvent, type GesturalEntry, type LedFrame, clamp01 } from '@lichtspiel/schemas';
+import type { Idiom, IdiomControlMap, IdiomProfile } from './types.js';
 import { EMPTY_PROFILE } from './types.js';
 import { type ArcLedPolicy, arcRingLevel, circDist, phaseHead } from './ledPolicies.js';
 
 export interface ArcEncoderSpec {
   name: string;
+  /** Human-readable description of what this logical encoder's TURN does (gestural panel). */
+  label?: string;
+  /** Human-readable description of what this logical encoder's PRESS does (gestural panel). */
+  pressLabel?: string;
   /**
    * 'absolute' clamps 0..1; 'relative' wraps 0..1 (a rotation phase); 'velocity'
    * treats a delta as an impulse into a damped angular velocity the host integrates
@@ -58,6 +74,18 @@ export interface ArcEncoderSpec {
 
 export interface ArcMacrosOptions {
   encoders: ArcEncoderSpec[];
+  /**
+   * How logical encoders fold onto fewer physical ones (see the module doc).
+   * 'couple' (default): physical `p` drives logical {p, p+P, …} together on turn.
+   * 'page': physical encoders map to one page of logical at a time; a chord flips.
+   */
+  fold?: 'couple' | 'page';
+  /**
+   * In 'couple' fold, a press either cycles through the covered logical actions
+   * ('cycle', default — preserves variety like a per-object regenerate) or fires
+   * every covered action at once ('all' — e.g. stop both coupled objects).
+   */
+  coupledPress?: 'cycle' | 'all';
 }
 
 export type ArcValues = Record<string, number>;
@@ -73,6 +101,8 @@ export interface ArcMacros extends Idiom<ArcValues> {
   velocity(name: string): number;
   /** Set a velocity-mode encoder's angular velocity (e.g. press → 0 to stop a spin). */
   setVelocity(name: string, vel: number): void;
+  /** The live arc control map for the connected profile (couple/page-aware). */
+  describe(profile: IdiomProfile): IdiomControlMap;
 }
 
 interface EncState {
@@ -109,6 +139,8 @@ function renderVelocityComet(
 
 export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
   let profile: IdiomProfile = EMPTY_PROFILE;
+  const fold = opts.fold ?? 'couple';
+  const coupledPress = opts.coupledPress ?? 'cycle';
   const encs: EncState[] = opts.encoders.map((spec) => {
     const mode = spec.mode ?? 'absolute';
     return {
@@ -121,6 +153,8 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
   });
   const heldPhysical: boolean[] = []; // per physical encoder (for the LED boost)
   const pressCursor: number[] = []; // per physical encoder (cycles its covered presses)
+  const chordConsumed: boolean[] = []; // per physical encoder (page-flip suppresses its single)
+  let page = 0; // 'page' fold — the active page of logical encoders
 
   const fire = (i: number): void => {
     encs[i]?.spec.onPress?.();
@@ -129,47 +163,96 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
   /** Physical encoder count: the device's, or the spec count when unknown (1:1). */
   const physicalCount = (): number => (profile.encoders > 0 ? profile.encoders : encs.length);
 
-  /** Logical encoders physical `p` covers that have a press action (for cycling). */
-  const coveredPressTargets = (p: number): number[] => {
+  /** Number of pages (only > 1 in 'page' fold on a device with fewer encoders). */
+  const pagesTotal = (): number => Math.max(1, Math.ceil(encs.length / physicalCount()));
+
+  /**
+   * The logical encoders physical `p` currently drives (turn). 'couple' → the whole
+   * column {p, p+P, …}; 'page' → just this page's single logical. Empty if out of range.
+   */
+  const coveredLogical = (p: number): number[] => {
     const P = physicalCount();
+    if (p < 0 || p >= P) return p >= 0 && p < encs.length ? [p] : []; // stale profile → 1:1
+    if (fold === 'page') {
+      const l = (page % pagesTotal()) * P + p;
+      return l < encs.length ? [l] : [];
+    }
     const out: number[] = [];
-    for (let l = p; l < encs.length; l += P) if (encs[l]?.spec.onPress) out.push(l);
+    for (let l = p; l < encs.length; l += P) out.push(l);
     return out;
   };
+
+  /** Of `coveredLogical(p)`, those with a press action (for couple-cycle / page press). */
+  const coveredPressTargets = (p: number): number[] =>
+    coveredLogical(p).filter((l) => encs[l]?.spec.onPress);
+
+  /** The logical encoder whose value/LED a physical ring shows (the primary). */
+  const primaryLogical = (p: number): number => coveredLogical(p)[0] ?? p;
 
   return {
     name: 'arcMacros',
 
     onArcDelta(e: ArcDeltaEvent): void {
-      // Trust the hardware: an event for encoder N means N exists. Bound only to
-      // the configured specs — a stale/empty profile must NOT drop input.
-      if (e.encoder < 0 || e.encoder >= encs.length) return;
-      const enc = encs[e.encoder];
-      if (!enc) return;
-      if (enc.mode === 'velocity') {
-        // A delta is an impulse into the angular velocity (the host integrates in tick()).
-        enc.vel += e.delta * (enc.spec.impulse ?? DEFAULT_IMPULSE);
-        return;
+      // Trust the hardware: an event for physical encoder N means N exists. Turn
+      // FOLDS — the delta drives every logical encoder this physical one covers, so
+      // a 4-encoder sketch stays fully controllable on an Arc 2 (no object stranded).
+      if (e.encoder < 0) return;
+      for (const li of coveredLogical(e.encoder)) {
+        const enc = encs[li];
+        if (!enc) continue;
+        if (enc.mode === 'velocity') {
+          // A delta is an impulse into the angular velocity (the host integrates in tick()).
+          enc.vel += e.delta * (enc.spec.impulse ?? DEFAULT_IMPULSE);
+          continue;
+        }
+        const sens = enc.spec.sensitivity ?? profile.arcRingLeds;
+        const next = enc.value + e.delta / Math.max(1, sens);
+        enc.value = enc.mode === 'relative' ? next - Math.floor(next) : clamp01(next);
       }
-      const sens = enc.spec.sensitivity ?? profile.arcRingLeds;
-      const next = enc.value + e.delta / Math.max(1, sens);
-      enc.value = enc.mode === 'relative' ? next - Math.floor(next) : clamp01(next);
     },
 
     onArcKey(e: ArcKeyEvent): void {
-      if (e.encoder < 0 || e.encoder >= encs.length) return;
+      if (e.encoder < 0) return;
+
+      // ── release ──────────────────────────────────────────────────
       if (e.state !== 1) {
+        const wasHeld = heldPhysical[e.encoder] ?? false;
         heldPhysical[e.encoder] = false;
+        // 'page' fold fires a single press on RELEASE so a chord can pre-empt it.
+        if (fold === 'page' && wasHeld && pagesTotal() > 1) {
+          if (chordConsumed[e.encoder]) chordConsumed[e.encoder] = false;
+          else for (const li of coveredPressTargets(e.encoder)) fire(li);
+        }
         return;
       }
-      // Only suppress non-enc0 presses when the device is KNOWN to have a single
-      // shared button (no per-encoder push). On a stale/empty profile, trust it.
+
+      // ── press ────────────────────────────────────────────────────
+      // Suppress non-enc0 presses only when the device is KNOWN to lack per-encoder
+      // push. On a stale/empty profile (or Arc 2/4, which have push), trust it.
       if (profile.encoders > 0 && !profile.pushPerEncoder && e.encoder !== 0) return;
       heldPhysical[e.encoder] = true;
-      // Fold: cycle through the logical presses this physical encoder covers, so
-      // a 4-encoder sketch keeps all its actions reachable on an Arc 2.
+
+      if (fold === 'page') {
+        if (pagesTotal() <= 1) {
+          for (const li of coveredPressTargets(e.encoder)) fire(li); // Arc 4: 1:1, fire now
+          return;
+        }
+        // A chord (this press while another encoder is held) flips the page.
+        const otherHeld = heldPhysical.some((h, i) => h && i !== e.encoder);
+        if (otherHeld) {
+          page = (page + 1) % pagesTotal();
+          for (let i = 0; i < heldPhysical.length; i++) if (heldPhysical[i]) chordConsumed[i] = true;
+        }
+        return; // a lone press resolves on release
+      }
+
+      // 'couple' fold — fire the covered press action(s).
       const targets = coveredPressTargets(e.encoder);
       if (targets.length === 0) return;
+      if (coupledPress === 'all') {
+        for (const li of targets) fire(li);
+        return;
+      }
       const cur = (pressCursor[e.encoder] ?? 0) % targets.length;
       pressCursor[e.encoder] = cur + 1;
       const logical = targets[cur];
@@ -202,23 +285,73 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
       if (enc) enc.vel = vel;
     },
 
+    describe(p: IdiomProfile): IdiomControlMap {
+      const P = Math.max(1, p.encoders > 0 ? p.encoders : encs.length);
+      const turnLabel = (li: number): string => encs[li]?.spec.label ?? encs[li]?.spec.name ?? `enc ${li}`;
+      const pressLabel = (li: number): string | undefined => encs[li]?.spec.pressLabel;
+      const arc: GesturalEntry[] = [];
+
+      if (fold === 'page' && pagesTotal() > 1) {
+        const pages = pagesTotal();
+        const cur = page % pages;
+        const onPage: string[] = [];
+        for (let ph = 0; ph < P; ph++) {
+          const li = cur * P + ph;
+          if (li < encs.length) onPage.push(`enc ${ph} = ${turnLabel(li)}`);
+        }
+        arc.push({ area: `enc 0–${P - 1}`, action: 'turn', effect: `page ${cur + 1} of ${pages} — ${onPage.join(' · ')}` });
+        arc.push({ area: 'both encoders', action: 'press together', effect: 'switch to the next page of encoder controls' });
+        for (let ph = 0; ph < P; ph++) {
+          const li = cur * P + ph;
+          const pl = pressLabel(li);
+          if (pl) arc.push({ area: `enc ${ph}`, action: 'press', effect: pl });
+        }
+        return { grid: [], arc };
+      }
+
+      for (let ph = 0; ph < P; ph++) {
+        const covered = coveredLogical(ph);
+        if (covered.length === 0) continue;
+        const coupled = covered.length > 1;
+        arc.push({
+          area: `enc ${ph}`,
+          action: 'turn',
+          effect: covered.map(turnLabel).join(' + ') + (coupled ? ' · coupled' : ''),
+        });
+        const pressTargets = covered.filter((l) => encs[l]?.spec.onPress);
+        if (pressTargets.length) {
+          const labels = pressTargets.map((l) => pressLabel(l) ?? 'action');
+          const eff =
+            pressTargets.length > 1
+              ? coupledPress === 'all'
+                ? `${labels.join(' + ')} · both`
+                : `${labels.join(' / ')} · cycles`
+              : labels[0];
+          arc.push({ area: `enc ${ph}`, action: 'press', effect: eff ?? 'action' });
+        }
+      }
+      return { grid: [], arc };
+    },
+
     renderArc(frame: LedFrame, p: IdiomProfile): void {
       const ringLeds = p.arcRingLeds;
-      const n = Math.min(encs.length, p.encoders);
-      for (let e = 0; e < n; e++) {
-        const enc = encs[e];
-        const ring = frame.arc[e];
+      // One ring per PHYSICAL encoder, showing the primary logical it drives (the
+      // current page in 'page' fold; the coupled-column head in 'couple' fold).
+      const nRings = Math.min(frame.arc.length, p.encoders > 0 ? p.encoders : encs.length);
+      for (let ph = 0; ph < nRings; ph++) {
+        const enc = encs[primaryLogical(ph)];
+        const ring = frame.arc[ph];
         if (!enc || !ring) continue;
         if (enc.mode === 'velocity' && enc.spec.velocityTrail) {
-          renderVelocityComet(ring, enc.value, enc.vel, ringLeds, heldPhysical[e] ?? false);
+          renderVelocityComet(ring, enc.value, enc.vel, ringLeds, heldPhysical[ph] ?? false);
         } else {
           for (let i = 0; i < ringLeds; i++) {
             let lv = arcRingLevel(enc.led, i, enc.value, ringLeds);
-            if (heldPhysical[e]) lv = Math.max(lv, HELD_BOOST);
+            if (heldPhysical[ph]) lv = Math.max(lv, HELD_BOOST);
             ring[i] = lv;
           }
         }
-        frame.arcDirty[e] = true;
+        frame.arcDirty[ph] = true;
       }
     },
 
@@ -250,6 +383,8 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
       }
       heldPhysical.length = 0;
       pressCursor.length = 0;
+      chordConsumed.length = 0;
+      page = 0;
     },
   };
 }

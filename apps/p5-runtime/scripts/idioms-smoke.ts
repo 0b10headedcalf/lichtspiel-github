@@ -366,12 +366,138 @@ function checkPhasePolicies(): void {
   }
 }
 
+// arcMacros TURN-coupling + PAGING — the fold so a 4-encoder sketch stays fully
+// controllable on an Arc 2 (the grid already folds; the arc turn must too).
+function checkArcCoupling(): void {
+  console.log('\n[arc turn-coupling + paging]');
+  const arc2 = profileFromSetup({ grid: null, arc: ARC_2 }); // 2 physical
+  const arc4 = profileFromSetup({ grid: null, arc: ARC_4 }); // 4 physical
+
+  // TURN couples: on an Arc 2, enc0 drives logical 0 + 2 together; enc1 → 1 + 3.
+  {
+    const a = createArcMacros({ encoders: [0, 1, 2, 3].map((i) => ({ name: `s${i}`, initial: 0.25 })) });
+    a.setProfile(arc2);
+    a.onArcDelta(ad(0, 20));
+    const v = a.values();
+    ok(
+      v.s0 > 0.25 && v.s2 > 0.25 && v.s1 === 0.25 && v.s3 === 0.25,
+      `couple: Arc 2 enc0 turn raises logical 0 + 2 (s0=${v.s0?.toFixed(2)} s2=${v.s2?.toFixed(2)})`,
+    );
+    a.onArcDelta(ad(1, 20));
+    const v2 = a.values();
+    ok(v2.s1 > 0.25 && v2.s3 > 0.25, 'couple: Arc 2 enc1 turn raises logical 1 + 3');
+  }
+  // On an Arc 4 the same sketch stays 1:1 — enc0 raises only logical 0.
+  {
+    const a = createArcMacros({ encoders: [0, 1, 2, 3].map((i) => ({ name: `s${i}`, initial: 0.25 })) });
+    a.setProfile(arc4);
+    a.onArcDelta(ad(0, 20));
+    const v = a.values();
+    ok(v.s0 > 0.25 && v.s2 === 0.25, 'couple: Arc 4 stays 1:1 (enc0 → only logical 0)');
+  }
+  // coupledPress 'all' fires every covered action (cycle is checked in checkArcFolding).
+  {
+    const hits: number[] = [];
+    const a = createArcMacros({
+      coupledPress: 'all',
+      encoders: [0, 1, 2, 3].map((i) => ({ name: `e${i}`, onPress: () => hits.push(i) })),
+    });
+    a.setProfile(arc2);
+    a.onArcKey(ak(0, 1));
+    a.onArcKey(ak(0, 0));
+    ok(hits.sort().join(',') === '0,2', `couple 'all': enc0 press fires logical 0 + 2 (got ${hits.join(',')})`);
+  }
+  // PAGING: 4 distinct encoders on an Arc 2 — page 0 = {0,1}; a chord flips to {2,3}.
+  {
+    const a = createArcMacros({
+      fold: 'page',
+      encoders: [0, 1, 2, 3].map((i) => ({ name: `p${i}`, mode: 'relative' as const })),
+    });
+    a.setProfile(arc2);
+    a.onArcDelta(ad(0, 16));
+    const v = a.values();
+    ok(v.p0 > 0 && v.p2 === 0, 'page: page 0 — enc0 drives logical 0 (not 2)');
+
+    const sink: number[] = [];
+    const b = createArcMacros({
+      fold: 'page',
+      encoders: [0, 1, 2, 3].map((i) => ({ name: `q${i}`, mode: 'relative' as const, onPress: () => sink.push(i) })),
+    });
+    b.setProfile(arc2);
+    b.onArcKey(ak(0, 1)); // hold enc0
+    b.onArcKey(ak(1, 1)); // press enc1 while enc0 held → chord → flip page
+    b.onArcKey(ak(1, 0));
+    b.onArcKey(ak(0, 0)); // release both
+    ok(sink.length === 0, `page: a chord flips the page + suppresses both singles (fired ${sink.join(',')})`);
+    b.onArcDelta(ad(0, 16));
+    ok(b.values().q2 > 0 && b.values().q0 === 0, 'page: after the chord, enc0 drives logical 2');
+
+    const sink2: number[] = [];
+    const c = createArcMacros({
+      fold: 'page',
+      encoders: [0, 1, 2, 3].map((i) => ({ name: `r${i}`, onPress: () => sink2.push(i) })),
+    });
+    c.setProfile(arc2);
+    c.onArcKey(ak(0, 1));
+    c.onArcKey(ak(0, 0)); // lone press → fires its single on release
+    ok(sink2.join(',') === '0', `page: a lone press fires its single on release (got ${sink2.join(',')})`);
+  }
+}
+
+// fillNotched — a fill ring that keeps dim orientation notches when un-lit.
+function checkFillNotched(): void {
+  console.log('\n[fillNotched ring]');
+  const arc4 = profileFromSetup({ grid: null, arc: ARC_4 });
+  const a = createArcMacros({ encoders: [{ name: 'x', led: 'fillNotched', initial: 0 }] });
+  a.setProfile(arc4);
+  const f0 = createLedFrame();
+  a.renderArc(f0, arc4);
+  const ring0 = f0.arc[0] ?? [];
+  const notches = ring0.filter((l) => l > 0).length;
+  ok(notches > 0 && ring0.every((l) => l <= 3), `fillNotched at 0 shows ${notches} dim notches (never blank)`);
+  a.set('x', 0.5);
+  const f1 = createLedFrame();
+  a.renderArc(f1, arc4);
+  const ring1 = f1.arc[0] ?? [];
+  const bright = ring1.filter((l) => l === 15).length;
+  ok(bright > 0 && ring1.some((l) => l > 0 && l < 15), 'fillNotched at 0.5 shows bright fill + dim notches');
+}
+
+// describe() — the live, hardware-resolved control map the gestural panel renders.
+function checkDescribe(): void {
+  console.log('\n[describe — live control map]');
+  const arc2 = profileFromSetup({ grid: GRID_64, arc: ARC_2 }); // 8×8 grid · 2 encoders
+  const fb = createFaderBank({
+    spread: false,
+    lanes: [0, 1, 2, 3].flatMap((o) => ['x', 'y', 'z', 'osc'].map((a) => ({ name: `o${o}${a}`, label: `obj ${o} ${a}` }))),
+  }); // 16 lanes → fold onto 8 cols
+  const arc = createArcMacros({
+    encoders: [0, 1, 2, 3].map((i) => ({ name: `s${i}`, label: `size ${i}`, pressLabel: `regen ${i}`, onPress: () => {} })),
+  });
+  const comp = composeIdioms([fb, arc]);
+  comp.setProfile(arc2);
+  const map = comp.describe(arc2);
+  ok(map.grid.length > 0 && map.arc.length > 0, 'describe: composite yields grid + arc entries');
+  const arcText = map.arc.map((e) => e.effect).join(' | ');
+  ok(/coupled/.test(arcText), `describe: Arc 2 arc entries mention coupling (${map.arc[0]?.effect})`);
+  const gridText = map.grid.map((e) => e.effect).join(' | ');
+  ok(/coupled/.test(gridText), 'describe: folded faderBank grid entries mention coupling');
+
+  const paged = createArcMacros({ fold: 'page', encoders: [0, 1, 2, 3].map((i) => ({ name: `p${i}`, label: `axis ${i}` })) });
+  paged.setProfile(arc2);
+  const pmap = paged.describe(arc2);
+  ok(pmap.arc.some((e) => /page/.test(e.effect)), `describe: page fold names the page (${pmap.arc[0]?.effect})`);
+}
+
 // ── run ───────────────────────────────────────────────────────────
 console.log('idioms-smoke — capability-aware monome idiom library');
 checkProfile('grid64/arc2', { grid: GRID_64, arc: ARC_2 });
 checkProfile('grid128/arc4', { grid: GRID_128, arc: ARC_4 });
 checkPushGating();
 checkArcFolding();
+checkArcCoupling();
+checkFillNotched();
+checkDescribe();
 checkVelocityMode();
 checkPhasePolicies();
 

@@ -43,6 +43,20 @@ export interface GesturalDictionary {
   arc: GesturalEntry[];
 }
 
+/**
+ * A LIVE control map — the gestural dictionary resolved to the CONNECTED hardware:
+ * the actual column/encoder count and how a sketch's logical controls fold onto a
+ * smaller device (e.g. a 4-encoder sketch coupled onto an Arc 2). Produced by the
+ * idiom layer at runtime (vs the static authored `GesturalDictionary`), so the panel
+ * always matches what's plugged in and updates on a hot-swap. `hardware` is a short
+ * summary (e.g. "Grid 64 (8×8) · Arc 2").
+ */
+export interface GesturalControlMap {
+  hardware: string;
+  grid: GesturalEntry[];
+  arc: GesturalEntry[];
+}
+
 export interface VisualTemplateMeta {
   id: string;
   name: string;

@@ -9,8 +9,8 @@
  * cleanly, and even two grid idioms overlay sensibly.
  */
 
-import { type LedFrame, createLedFrame } from '@lichtspiel/schemas';
-import type { Idiom, IdiomProfile } from './types.js';
+import { type GesturalEntry, type LedFrame, createLedFrame } from '@lichtspiel/schemas';
+import type { Idiom, IdiomControlMap, IdiomProfile } from './types.js';
 
 export * from './types.js';
 export * from './ledPolicies.js';
@@ -22,6 +22,8 @@ export * from './arcMacros.js';
 export interface ComposedIdiom extends Idiom<Record<string, unknown>> {
   /** The composed idioms, in order, for typed `values()` access by the sketch. */
   readonly idioms: readonly Idiom[];
+  /** The merged live control map across all composed idioms (for the gestural panel). */
+  describe(profile: IdiomProfile): IdiomControlMap;
 }
 
 function zeroGrid(f: LedFrame): void {
@@ -96,6 +98,19 @@ export function composeIdioms(idioms: Idiom[]): ComposedIdiom {
         best = best === undefined ? gi : Math.max(best, gi);
       }
       return best;
+    },
+
+    describe(profile: IdiomProfile): IdiomControlMap {
+      const grid: GesturalEntry[] = [];
+      const arc: GesturalEntry[] = [];
+      for (const idiom of idioms) {
+        const d = idiom.describe?.(profile);
+        if (d) {
+          grid.push(...d.grid);
+          arc.push(...d.arc);
+        }
+      }
+      return { grid, arc };
     },
 
     values(): Record<string, unknown> {

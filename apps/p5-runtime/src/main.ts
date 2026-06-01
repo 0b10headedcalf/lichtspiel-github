@@ -101,6 +101,10 @@ let locked = false;
 // space, live). The browser is the single template-mount authority: it re-mounts
 // at the active variant + refreshes the panel.
 const panel = new GesturalPanel();
+// Keep the panel in the left gutter, just below the HUD (clear of the bottom-right twin).
+const layoutPanel = (): void => panel.setTopPx(hud.offsetHeight + 24);
+layoutPanel();
+window.addEventListener('resize', layoutPanel);
 
 /** Performer-intent params preserved across a scene/variant re-mount. */
 function keepParams(): Partial<VisualParamVector> {
@@ -116,6 +120,7 @@ const variants = createVariantBrowser({
   apply: (template, seed, config) => {
     host.mount(template, { seed, config, params: keepParams() });
     panel.setDictionary(template.gestural);
+    panel.setControlMap(host.describeControls()); // hardware-accurate live map
   },
   onChange: (info) => panel.setVariant(info),
   divergence: 0.6,
@@ -190,6 +195,7 @@ bus.on('monome.setup', (s) => devices.setSimulated(s));
 devices.onChange((active, src) => {
   twin.setSetup(active);
   host.setProfile(active); // hot-swap: reshape the active sketch's idioms in place
+  panel.setControlMap(host.describeControls()); // re-render the panel for the new hardware
   console.info(`[lichtspiel] monome (${src}) → ${describeSetup(active)}`);
 });
 

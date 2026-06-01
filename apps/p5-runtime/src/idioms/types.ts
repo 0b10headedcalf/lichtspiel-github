@@ -19,11 +19,18 @@
 import {
   type ArcDeltaEvent,
   type ArcKeyEvent,
+  type GesturalEntry,
   type GridKeyEvent,
   type LedFrame,
   type MonomeSetup,
   ARC_RING_LEDS,
 } from '@lichtspiel/schemas';
+
+/** A live, hardware-resolved description of an idiom's grid + arc control mapping. */
+export interface IdiomControlMap {
+  grid: GesturalEntry[];
+  arc: GesturalEntry[];
+}
 
 /**
  * The capability summary an idiom needs to lay out events + LEDs. Derived from
@@ -76,6 +83,12 @@ export interface Idiom<V = unknown> {
   setProfile(profile: IdiomProfile): void;
   /** Reset to initial state (optional). */
   reset?(): void;
+  /**
+   * Describe this idiom's CURRENT control mapping for the connected profile — the
+   * actual columns/encoders + how logical controls fold (couple/page). Drives the
+   * hardware-accurate gestural panel; re-queried on a hot-swap. Optional.
+   */
+  describe?(profile: IdiomProfile): IdiomControlMap;
 }
 
 /** Derive an IdiomProfile from the active monome setup. */

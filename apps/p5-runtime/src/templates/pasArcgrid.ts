@@ -42,7 +42,7 @@ const variants = makeVariantFactory({
   palette: { canonical: 'random', options: ['random', 'warm', 'cool', 'monochrome', 'neon'] },
   shapes: { canonical: 'all', options: ['all', 'wireframe-platonic', 'parametric-only', 'simple'] },
   bg: { canonical: 'flash-press', options: ['flash-press', 'static-black', 'oscillating', 'gradient'] },
-  arcLed: { canonical: 'fill', options: ['fill', 'gauge', 'marker', 'segments', 'inverse'] },
+  arcLed: { canonical: 'fillNotched', options: ['fillNotched', 'gauge', 'marker', 'segments', 'inverse'] },
 });
 
 function allowedShapes(mode: string): number[] {
@@ -96,15 +96,29 @@ export const pasArcgrid: VisualTemplate = {
 
     let profile: IdiomProfile = profileFromSetup(ctx.setup);
 
-    // 16 fader lanes laid out as 4 panels × {X, Y, Z, osc} — exactly the
-    // windchime grid-128 layout; the first 8 reach objects 0–1 on a Grid 64.
+    // 16 fader lanes laid out as 4 panels × {X, Y, Z, osc} — exactly the windchime
+    // grid-128 layout; on a Grid 64 they grid-FOLD (col x → objects x & x+4), so all
+    // 4 objects stay controllable.
+    const AXIS_LABEL: Record<string, string> = {
+      x: 'X-rot freq',
+      y: 'Y-rot freq',
+      z: 'Z-rot freq',
+      osc: 'Z-oscillation',
+    };
     const lanes = [0, 1, 2, 3].flatMap((o) =>
-      ['x', 'y', 'z', 'osc'].map((axis) => ({ name: `o${o}${axis}`, initial: 4 / 7 })),
+      ['x', 'y', 'z', 'osc'].map((axis) => ({
+        name: `o${o}${axis}`,
+        label: `obj ${o} ${AXIS_LABEL[axis]}`,
+        initial: 4 / 7,
+      })),
     );
     const fb: FaderBank = createFaderBank({ spread: false, lanes });
     const arc: ArcMacros = createArcMacros({
+      // turn couples (enc0 scales obj0 + obj2 on an Arc 2); press cycles the regen.
       encoders: [0, 1, 2, 3].map((i) => ({
         name: `size${i}`,
+        label: `object ${i} size`,
+        pressLabel: `regenerate object ${i}`,
         initial: 0.25,
         led: arcLed,
         onPress: () => regen(i),
@@ -149,6 +163,7 @@ export const pasArcgrid: VisualTemplate = {
         profile = profileFromSetup(setup);
         idioms.setProfile(profile);
       },
+      controlMap: (setup) => idioms.describe(profileFromSetup(setup)),
       onGridKey(e): void {
         idioms.onGridKey?.(e);
       },

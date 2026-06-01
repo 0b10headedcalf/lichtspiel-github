@@ -14,8 +14,8 @@
  * (index.ts grid handling + step/playhead LEDs), ledPolicies.stepCellLevel.
  */
 
-import { type GridKeyEvent, type LedFrame } from '@lichtspiel/schemas';
-import type { Idiom, IdiomProfile } from './types.js';
+import { type GesturalEntry, type GridKeyEvent, type LedFrame } from '@lichtspiel/schemas';
+import type { Idiom, IdiomControlMap, IdiomProfile } from './types.js';
 import { EMPTY_PROFILE } from './types.js';
 import { stepCellLevel } from './ledPolicies.js';
 
@@ -189,6 +189,23 @@ export function createStepSequencer(opts: StepSequencerOptions = {}): StepSequen
         active,
         density: total ? on / total : 0,
       };
+    },
+
+    describe(p: IdiomProfile): IdiomControlMap {
+      const cols = Math.max(1, p.cols);
+      const pages = Math.ceil(steps / cols);
+      const grid: GesturalEntry[] = [
+        {
+          area: `rows 0–${Math.max(0, laneRows - 1)}`,
+          action: 'press',
+          effect: `toggle a step — ${steps} steps${pages > 1 ? ` over ${pages} pages (follows the play-head)` : ''}`,
+        },
+      ];
+      const reserved = p.rows - laneRows;
+      if (reserved >= 1) {
+        grid.push({ area: `row ${p.rows - 1}`, action: 'press (1 or 2 cols)', effect: 'cut the play position / latch a loop' });
+      }
+      return { grid, arc: [] };
     },
 
     setProfile(p: IdiomProfile): void {

@@ -157,8 +157,11 @@ export const monomeArcgridcombo: VisualTemplate = {
     let profile: IdiomProfile = profileFromSetup(ctx.setup);
     const seq: StepSequencer = createStepSequencer(); // 6 lanes, steps == cols
     const arc: ArcMacros = createArcMacros({
+      coupledPress: 'all', // on an Arc 2, one press stops BOTH coupled objects
       encoders: [0, 1, 2, 3].map((i) => ({
         name: `spin${i}`,
+        label: `spin object ${i}`,
+        pressLabel: `stop object ${i}`,
         mode: 'velocity',
         damping: 1, // free wheel — a press stops it (windchime resets rotationSpeed)
         impulse: SPIN_IMPULSE,
@@ -210,6 +213,7 @@ export const monomeArcgridcombo: VisualTemplate = {
         idioms.setProfile(profile);
         if (!userEdited) seedPattern(); // re-fit the default pattern to the new width
       },
+      controlMap: (setup) => idioms.describe(profileFromSetup(setup)),
       onGridKey(e): void {
         userEdited = true;
         idioms.onGridKey?.(e);

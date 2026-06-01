@@ -131,12 +131,14 @@ export const patternGridWorld: VisualTemplate = {
       flickerDensity: 0.4,
       rng: () => ctx.rng.random(),
     });
+    // On an Arc 2 the turns couple: enc0 → resting-alpha + bg, enc1 → active-alpha +
+    // connection-opacity (so every encoder visibly does something); presses cycle.
     const arc: ArcMacros = createArcMacros({
       encoders: [
-        { name: 'restAlpha', initial: 0.5, led: 'fill', onPress: () => (restingRgb = gridPalette(paletteMode, ctx.rng).resting) },
-        { name: 'actAlpha', initial: 0.7, led: 'fill', onPress: () => (activeRgb = gridPalette(paletteMode, ctx.rng).active) },
-        { name: 'bg', initial: 0.5, led: 'fill', onPress: () => toggleBorder() },
-        { name: 'conn', initial: 0.6, led: 'fill' },
+        { name: 'restAlpha', label: 'resting-cube alpha', pressLabel: 're-roll the resting colour', initial: 0.5, led: 'fillNotched', onPress: () => (restingRgb = gridPalette(paletteMode, ctx.rng).resting) },
+        { name: 'actAlpha', label: 'active-cube alpha', pressLabel: 're-roll the active colour', initial: 0.7, led: 'fillNotched', onPress: () => (activeRgb = gridPalette(paletteMode, ctx.rng).active) },
+        { name: 'bg', label: 'background brightness', pressLabel: 'randomise bg + toggle the border', initial: 0.5, led: 'fillNotched', onPress: () => toggleBorder() },
+        { name: 'conn', label: 'connection-line opacity', initial: 0.6, led: 'fillNotched' },
       ],
     });
     const idioms: ComposedIdiom = composeIdioms([paint, arc]);
@@ -186,6 +188,7 @@ export const patternGridWorld: VisualTemplate = {
         profile = profileFromSetup(setup);
         idioms.setProfile(profile);
       },
+      controlMap: (setup) => idioms.describe(profileFromSetup(setup)),
       onGridKey(e): void {
         idioms.onGridKey?.(e);
       },

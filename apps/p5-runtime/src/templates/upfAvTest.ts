@@ -188,17 +188,30 @@ export const upfAvTest: VisualTemplate = {
     // 16 fader lanes laid out as 4 panels × {X, Y, Z, osc} — exactly the
     // windchime grid-128 layout; the first 8 reach objects 0–1 on a Grid 64.
     // initial 4/7 mirrors the windchime faderPositions default of row 4.
+    const AXIS_LABEL: Record<string, string> = {
+      x: 'X-rot freq',
+      y: 'Y-rot freq',
+      z: 'Z-rot freq',
+      osc: 'oscillation amp',
+    };
     const lanes = [0, 1, 2, 3].flatMap((o) =>
-      ['x', 'y', 'z', 'osc'].map((axis) => ({ name: `o${o}${axis}`, initial: 4 / 7 })),
+      ['x', 'y', 'z', 'osc'].map((axis) => ({
+        name: `o${o}${axis}`,
+        label: `plane ${o} ${AXIS_LABEL[axis]}`,
+        initial: 4 / 7,
+      })),
     );
     const fb: FaderBank = createFaderBank({ spread: false, lanes });
     // 4 absolute size encoders; initial 0.25 mirrors windchime arcPositions 16/64.
-    // LED 'fill' mirrors windchime writeArcLeds (a solid 0..64 fill).
+    // 'fillNotched' keeps dim orientation notches so the ring is never blank; turn
+    // couples (enc0 scales planes 0 + 2 on an Arc 2), press cycles the regenerate.
     const arc: ArcMacros = createArcMacros({
       encoders: [0, 1, 2, 3].map((i) => ({
         name: `size${i}`,
+        label: `plane ${i} size`,
+        pressLabel: `regenerate plane ${i}`,
         initial: 0.25,
-        led: 'fill' as const,
+        led: 'fillNotched' as const,
         onPress: () => regen(i),
       })),
     });
@@ -413,6 +426,7 @@ export const upfAvTest: VisualTemplate = {
         profile = profileFromSetup(setup);
         idioms.setProfile(profile);
       },
+      controlMap: (setup) => idioms.describe(profileFromSetup(setup)),
 
       onGridKey(e): void {
         idioms.onGridKey?.(e);

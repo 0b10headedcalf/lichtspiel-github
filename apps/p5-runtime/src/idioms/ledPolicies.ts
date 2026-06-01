@@ -91,6 +91,7 @@ export function cellLevel(level: number): number {
 // ── arc ring policies ─────────────────────────────────────────────
 export type ArcLedPolicy =
   | 'fill'
+  | 'fillNotched'
   | 'comet'
   | 'gauge'
   | 'marker'
@@ -107,6 +108,16 @@ export type ArcLedPolicy =
 /** Solid fill from 12 o'clock up to the value (windchime `fill`). */
 export function fillRingLevel(i: number, value01: number, ringLeds: number): number {
   return i < fillCount(value01, ringLeds) ? LED_LEVEL_MAX : 0;
+}
+
+/**
+ * Like `fill`, but the un-lit region keeps dim every-8th orientation "notches" so
+ * the ring is never fully dark — it reads as a marked dial you fill toward, not
+ * blank-until-max. (The aesthetic the hero `Lichtspiel_v3` arc LEDs established.)
+ */
+export function fillNotchedRingLevel(i: number, value01: number, ringLeds: number): number {
+  if (i < fillCount(value01, ringLeds)) return LED_LEVEL_MAX; // bright fill to the value
+  return i % 8 === 0 ? 3 : 0; // dim orientation notches above it
 }
 
 /** Inverse fill — lit where `fill` isn't (windchime `inverse`). */
@@ -215,6 +226,8 @@ export function arcRingLevel(
   switch (policy) {
     case 'fill':
       return fillRingLevel(i, value01, ringLeds);
+    case 'fillNotched':
+      return fillNotchedRingLevel(i, value01, ringLeds);
     case 'gauge':
       return gaugeRingLevel(i, value01, ringLeds);
     case 'marker':

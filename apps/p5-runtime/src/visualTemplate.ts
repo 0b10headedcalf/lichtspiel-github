@@ -12,6 +12,7 @@ import type p5 from 'p5';
 import type {
   ArcDeltaEvent,
   ArcKeyEvent,
+  GesturalEntry,
   GridKeyEvent,
   LedFrame,
   LiveSessionState,
@@ -86,6 +87,12 @@ export interface VisualSketch {
    * in place — no re-mount, so playing state (fader values, step matrix) is kept.
    */
   setProfile?(setup: MonomeSetup): void;
+  /**
+   * The live, hardware-resolved control map (typically the sketch's composed idiom
+   * `describe()`), for the gestural panel — so it reflects the connected device +
+   * any coupling/paging rather than the static authored dictionary. Optional.
+   */
+  controlMap?(setup: MonomeSetup): { grid: GesturalEntry[]; arc: GesturalEntry[] };
 }
 
 export type VisualSketchFactory = (ctx: MountContext) => VisualSketch;

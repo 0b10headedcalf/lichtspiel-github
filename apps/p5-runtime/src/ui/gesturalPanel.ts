@@ -3,20 +3,29 @@
  * grid/arc gesture does) + a live variant readout. Adapted (not forked) from
  * windchime apps/web/src/ui/gesturalPanel.ts. Always present but **collapsed by
  * default** (compact: idiom name + variant line); `h` or a click on the header
- * expands it to the full control map. Positioned down the left, clear of the HUD.
+ * expands it to the full control map.
+ *
+ * The control map prefers the LIVE, hardware-resolved map from the sketch's idiom
+ * layer (`setControlMap`) over the static authored dictionary — so it always shows
+ * the *connected* device + any coupling/paging (e.g. "enc 0 → size obj 0 + 2 ·
+ * coupled" on an Arc 2), and re-renders on a hot-swap. Positioned down the LEFT
+ * gutter (below the HUD), clear of the bottom-right monome twin.
  */
 
-import type { GesturalDictionary, GesturalEntry } from '@lichtspiel/schemas';
+import type { GesturalControlMap, GesturalDictionary, GesturalEntry } from '@lichtspiel/schemas';
 import type { VariantInfo } from '../mutations/variantBrowser.js';
 
 export class GesturalPanel {
   private readonly root: HTMLElement;
   private readonly titleEl: HTMLElement;
+  private readonly hardwareEl: HTMLElement;
   private readonly summaryEl: HTMLElement;
   private readonly gridEl: HTMLElement;
   private readonly arcEl: HTMLElement;
   private readonly variantEl: HTMLElement;
   private collapsed = true;
+  private dict: GesturalDictionary | undefined;
+  private live: GesturalControlMap | null = null;
 
   constructor(parent: HTMLElement = document.body) {
     this.root = el('div', 'gestural-panel collapsed');
@@ -29,6 +38,7 @@ export class GesturalPanel {
     header.addEventListener('click', () => this.toggle());
 
     this.variantEl = el('div', 'gp-variant');
+    this.hardwareEl = el('div', 'gp-hardware');
 
     const body = el('div', 'gp-body');
     this.summaryEl = el('div', 'gp-summary');
@@ -36,7 +46,7 @@ export class GesturalPanel {
     this.arcEl = el('div', 'gp-section');
     body.append(this.summaryEl, this.gridEl, this.arcEl);
 
-    this.root.append(header, this.variantEl, body);
+    this.root.append(header, this.variantEl, this.hardwareEl, body);
     parent.appendChild(this.root);
   }
 
@@ -46,19 +56,22 @@ export class GesturalPanel {
     this.root.classList.toggle('collapsed', this.collapsed);
   }
 
-  /** Set the active template's control map (or clear it for a scene with none). */
+  /** Anchor the panel's top below `px` pixels (cleared of the HUD), capping its height. */
+  setTopPx(px: number): void {
+    this.root.style.top = `${px}px`;
+    this.root.style.maxHeight = `calc(100vh - ${px + 52}px)`; // leave room for the bottom-left badge
+  }
+
+  /** Set the active template's authored control map (name/summary + fallback gestures). */
   setDictionary(dict: GesturalDictionary | undefined): void {
-    if (!dict) {
-      this.titleEl.textContent = '— global column-fader';
-      this.summaryEl.textContent = 'No gestural map for this scene (legacy mapping).';
-      this.gridEl.innerHTML = '';
-      this.arcEl.innerHTML = '';
-      return;
-    }
-    this.titleEl.textContent = dict.name;
-    this.summaryEl.textContent = dict.summary ?? '';
-    this.renderSection(this.gridEl, 'grid', dict.grid);
-    this.renderSection(this.arcEl, 'arc', dict.arc);
+    this.dict = dict;
+    this.render();
+  }
+
+  /** Set the LIVE hardware-resolved control map (preferred over the static dict). */
+  setControlMap(map: GesturalControlMap | null): void {
+    this.live = map;
+    this.render();
   }
 
   /** Show the active variant: seed + the axes that diverged from canonical. */
@@ -74,6 +87,25 @@ export class GesturalPanel {
     this.variantEl.innerHTML =
       `<span class="gp-vrow">${escapeHtml(head)}</span>` +
       (diverged.length ? `<span class="gp-vaxes">${escapeHtml(diverged.join(' · '))}</span>` : '');
+  }
+
+  private render(): void {
+    if (!this.dict && !this.live) {
+      this.titleEl.textContent = '— global column-fader';
+      this.hardwareEl.textContent = '';
+      this.summaryEl.textContent = 'No gestural map for this scene (legacy mapping).';
+      this.gridEl.innerHTML = '';
+      this.arcEl.innerHTML = '';
+      return;
+    }
+    this.titleEl.textContent = this.dict?.name ?? 'Control map';
+    this.summaryEl.textContent = this.dict?.summary ?? '';
+    // Live map (hardware-accurate) wins; fall back to the authored dictionary.
+    this.hardwareEl.textContent = this.live ? `▶ ${this.live.hardware}` : '';
+    const grid = this.live?.grid ?? this.dict?.grid ?? [];
+    const arc = this.live?.arc ?? this.dict?.arc ?? [];
+    this.renderSection(this.gridEl, 'grid', grid);
+    this.renderSection(this.arcEl, 'arc', arc);
   }
 
   private renderSection(container: HTMLElement, label: string, entries: GesturalEntry[]): void {

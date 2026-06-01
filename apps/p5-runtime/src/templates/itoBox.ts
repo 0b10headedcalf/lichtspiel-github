@@ -186,14 +186,19 @@ export const itoBox: VisualTemplate = {
     // — exactly the windchime Grid-128 layout; folds into pairs on a Grid 64.
     // initial 4/7 matches windchime's sliderLevel default of 4 (of 7).
     const lanes = [0, 1, 2, 3].flatMap((o) =>
-      PARAM_NAMES.map((param) => ({ name: `o${o}${param}`, initial: 4 / 7 })),
+      PARAM_NAMES.map((param) => ({ name: `o${o}${param}`, label: `bg object ${o} ${param}`, initial: 4 / 7 })),
     );
     const fb: FaderBank = createFaderBank({ spread: false, lanes });
 
     const arc: ArcMacros = createArcMacros({
+      // 4 DISTINCT axes — on an Arc 2 they PAGE rather than couple: enc 0/1 cover
+      // {yaw, pitch}; press both encoders together to flip to page 2 = {roll, zoom}.
+      fold: 'page',
       encoders: [
         {
           name: 'yaw',
+          label: 'yaw spin',
+          pressLabel: 'randomise front/back faces',
           mode: 'velocity',
           damping,
           impulse: ROT_IMPULSE,
@@ -203,6 +208,8 @@ export const itoBox: VisualTemplate = {
         },
         {
           name: 'pitch',
+          label: 'pitch spin',
+          pressLabel: 'randomise top/bottom faces',
           mode: 'velocity',
           damping,
           impulse: ROT_IMPULSE,
@@ -212,6 +219,8 @@ export const itoBox: VisualTemplate = {
         },
         {
           name: 'roll',
+          label: 'roll spin',
+          pressLabel: 'randomise left/right faces',
           mode: 'velocity',
           damping,
           impulse: ROT_IMPULSE,
@@ -221,6 +230,8 @@ export const itoBox: VisualTemplate = {
         },
         {
           name: 'zoom',
+          label: 'zoom',
+          pressLabel: 'randomise bg + texture field',
           mode: 'velocity',
           damping,
           impulse: ZOOM_IMPULSE,
@@ -505,6 +516,7 @@ export const itoBox: VisualTemplate = {
         profile = profileFromSetup(setup);
         idioms.setProfile(profile);
       },
+      controlMap: (setup) => idioms.describe(profileFromSetup(setup)),
 
       onGridKey(e): void {
         idioms.onGridKey?.(e);

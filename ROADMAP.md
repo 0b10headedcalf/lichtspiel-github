@@ -189,8 +189,16 @@ Decisions: adapt windchime p5 + variants · hybrid control (uniform fader baseli
   `monomeArcgridcombo`. The batch (`upfAvTest`, `monomeArc4Shapes`, `itoBox`,
   `parquetDeformation`, `pasHalloween`) was re-ported via a strict-fidelity parallel
   Workflow + browser-verified (60/43/36 fps, no console errors, variant browse +
-  twin LED mirror confirmed). **Open:** the user's Grid-64/Arc-2 hardware pass on the
-  batch + the grid128/arc4 hot-swap pass (browser-proven via the twin meanwhile).
+  twin LED mirror confirmed).
+- 🟡 **Coupling rework** (Stage 1 done, plan `jaunty-wobbling-simon.md`): the user's
+  Grid-64/Arc-2 play surfaced that the GRID folds but the arc TURNS didn't (half the
+  objects uncontrollable). Added **arc turn-coupling** (`fold:'couple'` — physical
+  encoder drives logical {p,p+P,…} together; press cycle/all) + **paging**
+  (`fold:'page'` — chord flips, for itoBox's distinct axes), **`fillNotched`** rings
+  (dim notches, not blank-until-max), and a **repositioned + hardware-adaptive
+  gestural panel** (left gutter; live `describe(profile)` map showing the connected
+  device + coupling). 78 idiom-smoke checks. **Open:** Stage 2 = faithful WEBGL hero
+  re-port; then the user's Grid-64/Arc-2 checkpoint + Grid-128/Arc-4 hot-swap pass.
 
 ## Phase 5 — Metadata retrieval 🟡 (head start shipped)
 
