@@ -101,10 +101,13 @@ let locked = false;
 // space, live). The browser is the single template-mount authority: it re-mounts
 // at the active variant + refreshes the panel.
 const panel = new GesturalPanel();
-// Keep the panel in the left gutter, just below the HUD (clear of the bottom-right twin).
-const layoutPanel = (): void => panel.setTopPx(hud.offsetHeight + 24);
+// Keep the panel in the left gutter, just below the HUD — re-anchored whenever the
+// HUD's height changes (async font reflow, or bridge/live state appearing) so it can
+// never overlap the HUD, and on window resize. Clear of the bottom-right twin.
+const layoutPanel = (): void => panel.setTopPx(Math.round(hud.getBoundingClientRect().bottom) + 12);
 layoutPanel();
 window.addEventListener('resize', layoutPanel);
+new ResizeObserver(layoutPanel).observe(hud);
 
 /** Performer-intent params preserved across a scene/variant re-mount. */
 function keepParams(): Partial<VisualParamVector> {
