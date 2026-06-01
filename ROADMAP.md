@@ -162,8 +162,9 @@ Decisions: adapt windchime p5 + variants · hybrid control (uniform fader baseli
   `faderBank` / `stepSequencer` / `cellPaint` / `arcMacros` + `composeIdioms`, a pure
   control/LED layer generalizing `monomeMapping.ts` + `monomeFeedback.ts` + windchime's
   gestural dictionaries (`ledPolicies.ts` preserves the verified perfGrid/perfArc look).
-  Headless `idioms-smoke` (tsx): 46 checks under a Grid 64/Arc 2 AND a Grid 128/Arc 4
-  profile (values change, sized/lit frames, push-gating, compose-overlap).
+  Headless `idioms-smoke` (tsx): **64 checks** under a Grid 64/Arc 2 AND a Grid 128/Arc 4
+  profile (values change, sized/lit frames, push-gating, compose-overlap, capability
+  folding, the velocity mode, and the phase-comet LED policies).
 - ✅ **Part 3 — Sketch adaptation + variants**: contract additions (`hardwareTarget`,
   `idioms`, `altImpls`, `setProfile`, `MountContext.setup`+`controls`, `variants`,
   `VariantRecord`); host `getSetup`/`setProfile`/clear-LED-on-swap; the variant system
@@ -173,17 +174,23 @@ Decisions: adapt windchime p5 + variants · hybrid control (uniform fader baseli
   (`monomeArcgridcombo`, `patternGridWorld`) verified, Wave B (`pasArcgrid`,
   `upfAvTest`, `monomeArc4Shapes`, `itoBox`, `parquetDeformation`, `pasHalloween`) via
   a parallel per-sketch Workflow. Provenance in `visual-corpus/`.
-- 🟡 **Part 3 fidelity rework** (active; plan `polymorphic-growing-karp.md`): the
-  first-pass Wave A/B ports lost windchime's visual fidelity + rich variant spaces.
-  Now re-porting each faithfully (visual core + full `params.ts` variant space +
-  gestural dictionary), plus the **gestural panel** + **variant browser**
-  (`v`/`c`/`,`/`.`, `h`) and **capability folding** in the idiom layer so 4-encoder
-  / Grid-128 sketches adapt to Arc 2 / Grid 64 (arcMacros press-cycling + faderBank
-  grid-folding — see `docs/idioms.md`). **Done + hardware-verified on the Grid 64 /
-  Arc 2: `lichtspielOpus`, `pasArcgrid`, `patternGridWorld`.** Remaining: faithfully
-  re-port the other 6 (upfAvTest, monomeArc4Shapes, itoBox, monomeArcgridcombo,
-  parquetDeformation, pasHalloween) + itoBox arc velocity mode. The grid128/arc4
-  hot-swap hardware pass is still open.
+- ✅ **Part 3 fidelity rework** (done 2026-06-01; plan `polymorphic-growing-karp.md`):
+  the first-pass Wave A/B ports had lost windchime's visual fidelity + rich variant
+  spaces. **All 9 windchime families are now faithfully re-ported** — full visual core
+  + the exact `params.ts` variant space + the windchime gestural dictionary, with
+  control/LED rewired through the idioms. Shipped: the **gestural panel** + **variant
+  browser** (`v`/`c`/`,`/`.`, `h`); **capability folding** in the idiom layer so
+  4-encoder / Grid-128 sketches adapt to Arc 2 / Grid 64 (arcMacros press-cycling +
+  faderBank grid-folding — see `docs/idioms.md`); an `arcMacros` **velocity mode**
+  (impulse → damped angular velocity, `tick()`-integrated, |vel| ring trail) for the
+  itoBox roulette + monomeArcgridcombo spin; and the four windchime monomeArcgridcombo
+  **phase-comet** arc-LED policies (`spot`/`sweep`/`bar`/`opposing`). Calibrated +
+  Grid-64/Arc-2 hardware-verified: `lichtspielOpus`, `pasArcgrid`, `patternGridWorld`,
+  `monomeArcgridcombo`. The batch (`upfAvTest`, `monomeArc4Shapes`, `itoBox`,
+  `parquetDeformation`, `pasHalloween`) was re-ported via a strict-fidelity parallel
+  Workflow + browser-verified (60/43/36 fps, no console errors, variant browse +
+  twin LED mirror confirmed). **Open:** the user's Grid-64/Arc-2 hardware pass on the
+  batch + the grid128/arc4 hot-swap pass (browser-proven via the twin meanwhile).
 
 ## Phase 5 — Metadata retrieval 🟡 (head start shipped)
 

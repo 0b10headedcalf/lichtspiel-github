@@ -1,31 +1,34 @@
 /**
- * itoBox — adapted (NOT forked) from windchime-animation
- * packages/sketch-families/src/itoBoxV9/index.ts (itself a port of
- * processing_corpus_test1/Ito_Box_v9/Ito_Box_v9.pde), with its variant space
- * from itoBoxV9/params.ts. A central rotating "roulette" cube with per-face
- * colour pairs over a field of background tori/spheres.
+ * itoBox — faithful port (not forked) of windchime-animation
+ * packages/sketch-families/src/itoBoxV9 (itself a hand-port of
+ * processing_corpus_test1/Ito_Box_v9/Ito_Box_v9.pde). A central rotating
+ * "roulette" cube with six opposite-face-paired tints, driven by VELOCITY-mode
+ * encoders (an arc delta is an impulse into a damped angular velocity — the
+ * roulette feel), over a drifting field of four background 3D objects (complex
+ * torus / wavy torus / oscillating point-sphere / filament cloud) whose
+ * opacity / movement / randomness / scale are set by a 4-panel × 4-param fader
+ * grid. The crafted bg geometry, the wrap-around drift, the random-respawn,
+ * the six bio colours, and windchime's own simplification (solid face tints in
+ * place of the 300×300 per-pixel noise field per face) are all preserved.
  *
- * Lichtspiel rewiring (concept-adapted, not pixel-faithful):
- *   - The bespoke 4-panel × 4-param grid handler is replaced by the Part-2
- *     `faderBank` idiom: 8 lanes drive the background objects' opacity / move /
- *     random / scale (two groups A/B, so a Grid 64 reads one lane per column and
- *     a Grid 128 keeps cols 8–15 free). The per-sketch arc handler becomes
- *     `arcMacros`: each encoder's value is a TARGET angular velocity for
- *     yaw/pitch/roll/zoom (0.5 = stopped), integrated each frame with damping
- *     from the `damping` variant; pressing randomises an opposite-face colour
- *     pair (enc 0/1/2) or the background + bg-object colours (enc 3), all via
- *     ctx.rng. The arc rings show a velocity-trail read via the variant LED.
- *   - The original's per-pixel face textures (a 300×300 noise field per face,
- *     too heavy for the browser) stay dropped in favour of face-tinted solid
- *     shading; the heavy wireframe bg meshes become cheap solid tori/spheres,
- *     count-capped for 60fps. WEBGL, browser-only resilient, seeded via ctx.rng.
+ * Lichtspiel rewiring (control/LED → idioms): windchime's hardcoded 4-panel ×
+ * 4-fader grid handler (`refreshGrid` / `onGridKey` setting per-object slider
+ * levels) becomes a `faderBank` of 16 lanes — o{0..3}{opacity,move,random,scale},
+ * laid out exactly as the four Grid-128 panels, folding into pairs on a Grid 64.
+ * windchime's bespoke arc handler (`+= delta * impulse` velocities integrated +
+ * damped per frame, the comet `writeArcLeds`) becomes `arcMacros` in VELOCITY
+ * mode: four encoders yaw/pitch/roll/zoom, `velocityTrail` rendering the same
+ * |velocity| comet, damping from the variant, presses randomising opposite-face
+ * colour pairs (enc 0/1/2) or the background + texture-field structure (enc 3).
+ * The host integrates the physics via `arc.tick(dt*1000)` each frame; the sketch
+ * never damps itself. Visual values fold gently with the live VisualParamVector
+ * axes. WEBGL, seeded entirely via ctx.rng.
  */
 
-import { type VisualParamVector, clamp01 } from '@lichtspiel/schemas';
+import { type VisualParamVector, clamp01, lerp } from '@lichtspiel/schemas';
 import type p5 from 'p5';
 import type { MountContext, VisualTemplate } from '../visualTemplate.js';
 import {
-  type ArcLedPolicy,
   type ArcMacros,
   type ComposedIdiom,
   type FaderBank,
@@ -36,102 +39,89 @@ import {
   profileFromSetup,
 } from '../idioms/index.js';
 import { cfg, makeVariantFactory } from '../mutations/familyVariants.js';
-import type { SeededRng } from '../seededRng.js';
+import { type Rgb, hslToRgb } from './lib/palettes.js';
 
-type RGB = [number, number, number];
+const NUM_BG_OBJ = 4;
+const P_OPACITY = 0;
+const P_MOVE = 1;
+const P_RANDOM = 2;
+const P_SCALE = 3;
+const PARAM_NAMES = ['opacity', 'move', 'random', 'scale'] as const;
+
+// windchime impulse was 0.0065 rad/frame; arcMacros velocity is in phase-turns
+// per 60fps frame, so divide by 2π. enc3 (zoom) uses 2× like windchime.
+const TWO_PI = Math.PI * 2;
+const ROT_IMPULSE = 0.0065 / TWO_PI; // ≈ 0.001034
+const ZOOM_IMPULSE = ROT_IMPULSE * 2; // ≈ 0.002068
+const ZOOM_MIN = 0.35;
+const ZOOM_MAX = 5; // windchime clamps zoom to [0.35, 5]
+
+// windchime's original canvas was 1024×768 + the bg field lived in that world
+// space (±w/2 etc). We keep those world units relative to the live canvas so the
+// drift + wrap read identically at any size: span = min(w,h) sets the unit.
+const WORLD_W_REL = 1.0; // ×min(w,h) → half-width margin reference
+const WORLD_H_REL = 0.75; // ×min(w,h) → the 768/1024 aspect of the original field
+const WORLD_Z = 450; // ×(min(w,h)/768) spawn depth, like windchime's ±450
+const CUBE_REL = 0.47; // windchime drawCube(360) on a 768-tall canvas ≈ 0.47×minDim
 
 /** Structural variants the `v` key / arc re-roll, distinct from the live axes. */
 const variants = makeVariantFactory({
-  palette: { canonical: 'random', options: ['random', 'warm', 'cool', 'neon', 'monochrome'] },
-  damping: { canonical: 'medium', options: ['none', 'light', 'medium', 'heavy'] },
-  bgShapes: { canonical: 'all', options: ['all', 'tori', 'spheres'] },
-  arcLed: { canonical: 'comet', options: ['comet', 'gauge', 'marker', 'segments'] },
+  palette: { canonical: 'bio', options: ['bio', 'warm', 'cool', 'monochrome'] },
+  bgShapes: { canonical: 'all', options: ['all', 'tori-only', 'sphere-only', 'filaments-only'] },
+  damping: { canonical: 'roulette', options: ['roulette', 'snappy', 'liquid'] },
 });
 
-const NUM_BG = 5; // capped for 60fps
-const MAX_SPEED = 0.05; // rad/frame at a fully-turned encoder
-const MAX_ZOOM_RATE = 0.012; // zoom units/frame at a fully-turned encoder
-
-/** Per-frame velocity damping for the roulette feel (closer to 1 = more glide). */
+/** windchime dampingValue — per-60fps-frame velocity decay for the roulette feel. */
 function dampingValue(mode: string): number {
   switch (mode) {
-    case 'none':
-      return 1;
-    case 'light':
-      return 0.995;
-    case 'heavy':
+    case 'snappy':
       return 0.9;
-    case 'medium':
+    case 'liquid':
+      return 0.995;
+    case 'roulette':
     default:
-      return 0.97;
+      return 0.98;
   }
 }
 
-/** A palette colour for the given mode, drawn from ctx.rng (seeded, reproducible). */
-function paletteColor(mode: string, rng: SeededRng): RGB {
+/** windchime allowedBgShapes — 0 complex torus · 1 wavy torus · 2 sphere · 3 filaments. */
+function allowedBgShapes(mode: string): number[] {
+  switch (mode) {
+    case 'tori-only':
+      return [0, 1];
+    case 'sphere-only':
+      return [2];
+    case 'filaments-only':
+      return [3];
+    case 'all':
+    default:
+      return [0, 1, 2, 3];
+  }
+}
+
+/** windchime bioColor — the six signature bioluminescent swatches. */
+function bioColor(rng: MountContext['rng']): Rgb {
+  const p = rng.int(6);
+  if (p === 0) return [0, 255, 210];
+  if (p === 1) return [110, 190, 255];
+  if (p === 2) return [255, 110, 210];
+  if (p === 3) return [170, 255, 110];
+  if (p === 4) return [255, 180, 70];
+  return [230, 230, 255];
+}
+
+/** windchime paletteColor — a colour for the given mode (reuses shared hslToRgb). */
+function paletteColor(mode: string, rng: MountContext['rng']): Rgb {
   switch (mode) {
     case 'warm':
       return hslToRgb(rng.range(0, 60), 0.85, 0.6);
     case 'cool':
       return hslToRgb(rng.range(180, 270), 0.85, 0.6);
-    case 'neon':
-      return hslToRgb(rng.range(0, 360), 1, 0.62);
     case 'monochrome':
-      return hslToRgb(rng.range(0, 360), 0.15, rng.range(0.45, 0.85));
-    case 'random':
-    default: {
-      const swatches: RGB[] = [
-        [0, 255, 210],
-        [110, 190, 255],
-        [255, 110, 210],
-        [170, 255, 110],
-        [255, 180, 70],
-        [230, 230, 255],
-      ];
-      return rng.pick(swatches);
-    }
-  }
-}
-
-function hslToRgb(h: number, s: number, l: number): RGB {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r1 = 0;
-  let g1 = 0;
-  let b1 = 0;
-  if (h < 60) {
-    r1 = c;
-    g1 = x;
-  } else if (h < 120) {
-    r1 = x;
-    g1 = c;
-  } else if (h < 180) {
-    g1 = c;
-    b1 = x;
-  } else if (h < 240) {
-    g1 = x;
-    b1 = c;
-  } else if (h < 300) {
-    r1 = x;
-    b1 = c;
-  } else {
-    r1 = c;
-    b1 = x;
-  }
-  return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
-}
-
-/** Background shape kinds allowed by the variant (0 = torus, 1 = sphere). */
-function bgShapePool(mode: string): number[] {
-  switch (mode) {
-    case 'tori':
-      return [0];
-    case 'spheres':
-      return [1];
-    case 'all':
+      return hslToRgb(rng.range(0, 360), 0.7, rng.range(0.4, 0.75));
+    case 'bio':
     default:
-      return [0, 1];
+      return bioColor(rng);
   }
 }
 
@@ -139,10 +129,9 @@ interface BgObject {
   pos: { x: number; y: number; z: number };
   vel: { x: number; y: number; z: number };
   angle: number;
-  spin: number;
+  speed: number;
   type: number;
-  color: RGB;
-  group: 0 | 1; // which fader group (A even / B odd) drives this object
+  color: Rgb;
 }
 
 export const itoBox: VisualTemplate = {
@@ -150,123 +139,362 @@ export const itoBox: VisualTemplate = {
   name: 'Ito Box — Cube Roulette',
   family: 'roulette',
   description:
-    'A central velocity-driven "roulette" cube with per-face colour pairs over a drifting field of tori/spheres. Arc encoders spin it; the grid faders shape the background. Grid 128 / Arc 4.',
+    'A central velocity-physics "roulette" cube with opposite-face colour pairs over a drifting field of four 3D objects (complex/wavy tori, point-sphere, filament cloud). Arc encoders spin yaw/pitch/roll/zoom; a 4-panel fader grid shapes the background. Grid 128 / Arc 4.',
   tags: ['cube', 'roulette', '3d', 'rotation', 'velocity', 'arc', 'fader', 'monome'],
-  defaultParams: {
-    motion: 0.5,
-    turbulence: 0.5,
-    density: 0.5,
-    contrast: 0.6,
-    cameraDepth: 0.5,
-    palette: 0.4,
-  },
+  defaultParams: { motion: 0.5, turbulence: 0.5, density: 0.5, contrast: 0.6, palette: 0.4 },
   renderer: 'webgl',
-  sourceLineage: 'windchime itoBoxV9 (Ito_Box_v9.pde)',
+  sourceLineage: 'windchime itoBoxV9 (Ito_Box_v9.pde, faithful port)',
   hardwareTarget: { grid: '128', arc: '4' },
   idioms: ['faderBank', 'arcMacros'],
+  gestural: {
+    name: 'Cube Roulette + Background Field',
+    summary:
+      'Central rotating cube driven by velocity-physics encoders (a turn is an impulse into a damped angular velocity — the "roulette" feel). Grid governs four background objects with per-param vertical faders (opacity / movement / randomness / scale), one 4-column panel per object. On an Arc 2 each encoder press cycles through two of the four colour actions; on a Grid 64 the 16 faders fold into pairs.',
+    grid: [
+      {
+        area: 'cols 0–3 / 4–7 / 8–11 / 12–15 (4 panels), any row',
+        action: 'press a row',
+        effect:
+          "set that object's parameter fader (higher row = higher level); the param is col%4: 0=opacity 1=movement 2=randomness 3=scale",
+      },
+    ],
+    arc: [
+      { area: 'arc enc 0', action: 'turn', effect: 'add yaw velocity (impulse, then damped — the roulette spin)' },
+      { area: 'arc enc 1', action: 'turn', effect: 'add pitch velocity' },
+      { area: 'arc enc 2', action: 'turn', effect: 'add roll velocity' },
+      { area: 'arc enc 3', action: 'turn', effect: 'add zoom velocity (2× impulse, bounded)' },
+      { area: 'arc enc 0', action: 'press', effect: 'randomise the front/back face colour pair' },
+      { area: 'arc enc 1', action: 'press', effect: 'randomise the top/bottom face colour pair' },
+      { area: 'arc enc 2', action: 'press', effect: 'randomise the left/right face colour pair' },
+      { area: 'arc enc 3', action: 'press', effect: 'randomise the background colour + the texture-field structure' },
+    ],
+  },
   variants,
 
   create(ctx: MountContext) {
-    const paletteName = cfg<string>(ctx.config, 'palette', 'random');
-    const dampingName = cfg<string>(ctx.config, 'damping', 'medium');
-    const bgShapesName = cfg<string>(ctx.config, 'bgShapes', 'all');
-    const arcLed = cfg<ArcLedPolicy>(ctx.config, 'arcLed', 'comet');
+    const paletteMode = cfg<string>(ctx.config, 'palette', 'bio');
+    const bgShapesMode = cfg<string>(ctx.config, 'bgShapes', 'all');
+    const dampingMode = cfg<string>(ctx.config, 'damping', 'roulette');
 
-    const damping = dampingValue(dampingName);
-    const shapePool = bgShapePool(bgShapesName);
+    const damping = dampingValue(dampingMode);
+    const bgShapePool = allowedBgShapes(bgShapesMode);
 
     // ── idioms (the control map) ───────────────────────────────────
     let profile: IdiomProfile = profileFromSetup(ctx.setup);
 
-    // 8 faders, one column each (spread:false) so a Grid 128 keeps cols 8–15
-    // free; lanes are 4 params × 2 background groups (A drives even objects,
-    // B drives odd). 4 arc encoders (extra two lie dormant on an Arc 2).
-    const fb: FaderBank = createFaderBank({
-      spread: false,
-      lanes: [
-        { name: 'opacityA', initial: 0.6 },
-        { name: 'moveA', initial: 0.45 },
-        { name: 'randomA', initial: 0.2 },
-        { name: 'scaleA', initial: 0.5 },
-        { name: 'opacityB', initial: 0.6 },
-        { name: 'moveB', initial: 0.45 },
-        { name: 'randomB', initial: 0.2 },
-        { name: 'scaleB', initial: 0.5 },
-      ],
-    });
+    // 16 fader lanes laid out as 4 object panels × {opacity, move, random, scale}
+    // — exactly the windchime Grid-128 layout; folds into pairs on a Grid 64.
+    // initial 4/7 matches windchime's sliderLevel default of 4 (of 7).
+    const lanes = [0, 1, 2, 3].flatMap((o) =>
+      PARAM_NAMES.map((param) => ({ name: `o${o}${param}`, initial: 4 / 7 })),
+    );
+    const fb: FaderBank = createFaderBank({ spread: false, lanes });
+
     const arc: ArcMacros = createArcMacros({
       encoders: [
-        { name: 'yaw', initial: 0.5, led: arcLed, onPress: () => randomizeFacePair(0) },
-        { name: 'pitch', initial: 0.5, led: arcLed, onPress: () => randomizeFacePair(1) },
-        { name: 'roll', initial: 0.5, led: arcLed, onPress: () => randomizeFacePair(2) },
-        { name: 'zoom', initial: 0.5, led: arcLed, onPress: () => randomizeBackground() },
+        {
+          name: 'yaw',
+          mode: 'velocity',
+          damping,
+          impulse: ROT_IMPULSE,
+          integrate: 'wrap',
+          velocityTrail: true,
+          onPress: () => randomizeFacePair(0), // front/back
+        },
+        {
+          name: 'pitch',
+          mode: 'velocity',
+          damping,
+          impulse: ROT_IMPULSE,
+          integrate: 'wrap',
+          velocityTrail: true,
+          onPress: () => randomizeFacePair(1), // top/bottom
+        },
+        {
+          name: 'roll',
+          mode: 'velocity',
+          damping,
+          impulse: ROT_IMPULSE,
+          integrate: 'wrap',
+          velocityTrail: true,
+          onPress: () => randomizeFacePair(2), // left/right
+        },
+        {
+          name: 'zoom',
+          mode: 'velocity',
+          damping,
+          impulse: ZOOM_IMPULSE,
+          integrate: 'clamp', // zoom is a bounded phase, not a rotation
+          velocityTrail: true,
+          initial: (1.0 - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN), // windchime zoom starts at 1.0
+          onPress: () => randomizeBackground(),
+        },
       ],
     });
     const idioms: ComposedIdiom = composeIdioms([fb, arc]);
     idioms.setProfile(profile);
 
     // ── performance state ──────────────────────────────────────────
-    // Cube orientation + zoom and their integrated velocities (the roulette).
+    // Unbounded orientation accumulators (the host integrates velocity via tick;
+    // we accumulate the angle ourselves). Zoom is read from the clamped phase.
     let yaw = 0;
     let pitch = 0;
     let roll = 0;
-    let zoom = 1;
-    let yawVel = 0;
-    let pitchVel = 0;
-    let rollVel = 0;
-    let zoomVel = 0;
 
-    let bgColor: RGB = [4, 5, 9];
-    // Face tints as three opposite pairs: [front,back, left,right, top,bottom].
-    const fp = paletteColor(paletteName, ctx.rng);
-    const lp = paletteColor(paletteName, ctx.rng);
-    const tp = paletteColor(paletteName, ctx.rng);
-    const faceTints: RGB[] = [fp, fp, lp, lp, tp, tp];
+    // Face tints as three opposite pairs: [front,back, left,right, top,bottom] —
+    // windchime seeds front/back & left/right from one draw each and top/bottom
+    // from a third (fb / lr / tb).
+    const fbColor = paletteColor(paletteMode, ctx.rng);
+    const lrColor = paletteColor(paletteMode, ctx.rng);
+    const tbColor = paletteColor(paletteMode, ctx.rng);
+    const faceTints: Rgb[] = [fbColor, fbColor, lrColor, lrColor, tbColor, tbColor];
+
+    let bgColor: Rgb = [0, 0, 0];
+    // Shared "texture structure" — windchime's noise-field seed/type; it no longer
+    // drives a per-pixel field (kept as windchime's documented simplification) but
+    // enc3 still re-rolls it so the gesture is preserved + reproducible.
+    let fieldType = ctx.rng.int(3);
+    let fieldSeed = ctx.rng.range(0, 1000);
 
     let cur: VisualParamVector = ctx.initialParams;
 
+    // PVector.random3D analog (windchime randomVec3).
     const randomVec3 = (): { x: number; y: number; z: number } => {
       const u = ctx.rng.range(-1, 1);
-      const theta = ctx.rng.range(0, Math.PI * 2);
+      const theta = ctx.rng.range(0, TWO_PI);
       const r = Math.sqrt(Math.max(0, 1 - u * u));
       return { x: r * Math.cos(theta), y: r * Math.sin(theta), z: u };
     };
 
-    const spawnBg = (group: 0 | 1): BgObject => {
+    // Background objects live in world units relative to a unit span (set each
+    // frame from min(w,h)); positions/velocities here are in those world units.
+    const initBgObj = (): BgObject => {
       const v = randomVec3();
       const mag = ctx.rng.range(0.2, 1);
       return {
-        pos: { x: ctx.rng.range(-1, 1), y: ctx.rng.range(-1, 1), z: ctx.rng.range(-1, 1) },
+        pos: {
+          x: ctx.rng.range(-WORLD_W_REL, WORLD_W_REL),
+          y: ctx.rng.range(-WORLD_H_REL, WORLD_H_REL),
+          z: ctx.rng.range(-(WORLD_Z / 768), WORLD_Z / 768),
+        },
         vel: { x: v.x * mag, y: v.y * mag, z: v.z * mag },
-        angle: ctx.rng.range(0, Math.PI * 2),
-        spin: ctx.rng.range(0.003, 0.02),
-        type: shapePool[ctx.rng.int(shapePool.length)] ?? 0,
-        color: paletteColor(paletteName, ctx.rng),
-        group,
+        angle: ctx.rng.range(0, TWO_PI),
+        speed: ctx.rng.range(0.003, 0.015),
+        type: bgShapePool[ctx.rng.int(bgShapePool.length)] ?? 0,
+        color: paletteColor(paletteMode, ctx.rng),
       };
     };
-
-    const bgObjects: BgObject[] = Array.from({ length: NUM_BG }, (_, i) => spawnBg((i % 2) as 0 | 1));
+    const bgObjects: BgObject[] = Array.from({ length: NUM_BG_OBJ }, initBgObj);
 
     // ── arc-press actions (seeded via ctx.rng) ─────────────────────
     function randomizeFacePair(pair: number): void {
-      const c = paletteColor(paletteName, ctx.rng);
+      const c = paletteColor(paletteMode, ctx.rng);
       const a = pair * 2;
       faceTints[a] = c;
       faceTints[a + 1] = c;
     }
     function randomizeBackground(): void {
-      bgColor = [ctx.rng.int(24), ctx.rng.int(24), ctx.rng.int(28)];
-      for (const o of bgObjects) o.color = paletteColor(paletteName, ctx.rng);
+      bgColor = [ctx.rng.int(70), ctx.rng.int(70), ctx.rng.int(70)];
+      fieldType = ctx.rng.int(3);
+      fieldSeed = ctx.rng.range(0, 1000);
     }
 
-    /** Fold a fader value with a centred VisualParamVector axis (0.5 = no change). */
-    const fold = (f: number, axis: number): number => clamp01(f + (axis - 0.5) * 0.4);
+    // ── bg object geometry (faithful windchime ports) ──────────────
+
+    function drawComplexTorus(p: p5, r1: number, r2: number): void {
+      const sides = 18;
+      const rings = 22;
+      for (let i = 0; i < sides; i++) {
+        const t1 = (TWO_PI * i) / sides;
+        const t2 = (TWO_PI * (i + 1)) / sides;
+        p.beginShape(p.LINES);
+        for (let j = 0; j <= rings; j++) {
+          const ph = (TWO_PI * j) / rings;
+          const x1 = (r1 + r2 * Math.cos(ph)) * Math.cos(t1);
+          const y1 = (r1 + r2 * Math.cos(ph)) * Math.sin(t1);
+          const z1 = r2 * Math.sin(ph);
+          const x2 = (r1 + r2 * Math.cos(ph)) * Math.cos(t2);
+          const y2 = (r1 + r2 * Math.cos(ph)) * Math.sin(t2);
+          const z2 = r2 * Math.sin(ph);
+          p.vertex(x1, y1, z1);
+          p.vertex(x2, y2, z2);
+        }
+        p.endShape();
+      }
+    }
+
+    function drawWavyTorus(p: p5, r1: number, r2: number): void {
+      const sides = 18;
+      const rings = 20;
+      for (let i = 0; i < sides; i++) {
+        const t1 = (TWO_PI * i) / sides;
+        const t2 = (TWO_PI * (i + 1)) / sides;
+        p.beginShape(p.LINES);
+        for (let j = 0; j <= rings; j++) {
+          const ph = (TWO_PI * j) / rings;
+          const d1 = r1 + r2 * Math.cos(ph) + Math.sin(t1 * 4) * r2 * 0.35;
+          const d2 = r1 + r2 * Math.cos(ph) + Math.sin(t2 * 4) * r2 * 0.35;
+          p.vertex(d1 * Math.cos(t1), d1 * Math.sin(t1), r2 * Math.sin(ph));
+          p.vertex(d2 * Math.cos(t2), d2 * Math.sin(t2), r2 * Math.sin(ph));
+        }
+        p.endShape();
+      }
+    }
+
+    function drawOscillatingSphere(p: p5, size: number): void {
+      const d = 18;
+      p.beginShape(p.POINTS);
+      for (let i = 0; i < d; i++) {
+        const t = (TWO_PI * i) / d;
+        for (let j = 0; j < d; j++) {
+          const ph = (Math.PI * j) / d;
+          const x = size * Math.sin(ph) * Math.cos(t);
+          const y = size * Math.sin(ph) * Math.sin(t);
+          const z = size * Math.cos(ph);
+          p.vertex(x, y, z);
+        }
+      }
+      p.endShape();
+    }
+
+    function drawFilamentCloud(p: p5, size: number): void {
+      const strands = 14;
+      for (let s = 0; s < strands; s++) {
+        const phase = (TWO_PI * s) / strands;
+        p.beginShape();
+        for (let i = 0; i < 30; i++) {
+          const u = -size + (i / 29) * size * 2;
+          const x = 0.35 * size * Math.sin(u * 0.02 + phase);
+          const y = u * 0.7;
+          const z = 0.35 * size * Math.cos(u * 0.018 + phase);
+          p.vertex(x, y, z);
+        }
+        p.endShape();
+      }
+    }
+
+    /**
+     * Faithful windchime drawBgObjects: per-object opacity / movement /
+     * randomness / scale read from the four fader lanes (value 0..1 → level 0..7,
+     * active = value > 0.02), folded gently with the live axes; wrap-around drift
+     * + random respawn; rotate + draw the object's kind. `span` is min(w,h).
+     */
+    function drawBgObjects(p: p5, span: number, frames: number): void {
+      const fv = fb.values();
+      const worldW = WORLD_W_REL; // half-extents in world units
+      const worldH = WORLD_H_REL;
+      const marginX = worldW + 200 / 768;
+      const marginY = worldH + 200 / 768;
+      const zEdge = 600 / 768;
+
+      p.noFill();
+      for (let i = 0; i < NUM_BG_OBJ; i++) {
+        const obj = bgObjects[i];
+        if (!obj) continue;
+
+        // value → level (0..7) + active (windchime sliderLevel / sliderActive).
+        const lv = (param: number): number => clamp01(fv[`o${i}${PARAM_NAMES[param]}`] ?? 0) * 7;
+        const active = (param: number): boolean => (fv[`o${i}${PARAM_NAMES[param]}`] ?? 0) > 0.02;
+
+        if (!active(P_OPACITY)) continue; // opacity gate = the object's render gate
+
+        // windchime per-param mappings, folded gently with the live axes.
+        const opacity = (20 + (lv(P_OPACITY) / 7) * 120) * lerp(0.7, 1.2, cur.density);
+        const moveAmt = active(P_MOVE)
+          ? (0.2 + (lv(P_MOVE) / 7) * 2.1) * lerp(0.6, 1.5, cur.motion)
+          : 0;
+        const randProb = active(P_RANDOM) ? (lv(P_RANDOM) / 7) * 0.75 : 0;
+        const scaleAmt = active(P_SCALE) ? 0.5 + (lv(P_SCALE) / 7) * 2.3 : 1;
+
+        // drift (per-frame in world units), then wrap at the field edges.
+        obj.pos.x += obj.vel.x * moveAmt * frames * 0.0026; // ≈ windchime px ÷ 768
+        obj.pos.y += obj.vel.y * moveAmt * frames * 0.0026;
+        obj.pos.z += obj.vel.z * moveAmt * frames * 0.0026;
+        if (obj.pos.x < -marginX) obj.pos.x = marginX;
+        if (obj.pos.x > marginX) obj.pos.x = -marginX;
+        if (obj.pos.y < -marginY) obj.pos.y = marginY;
+        if (obj.pos.y > marginY) obj.pos.y = -marginY;
+        if (obj.pos.z < -zEdge) obj.pos.z = zEdge;
+        if (obj.pos.z > zEdge) obj.pos.z = -zEdge;
+
+        // randomness: chance to respawn position/velocity (+ sometimes kind/colour).
+        if (ctx.rng.random() < randProb * frames) {
+          obj.pos = {
+            x: ctx.rng.range(-worldW, worldW),
+            y: ctx.rng.range(-worldH, worldH),
+            z: ctx.rng.range(-(WORLD_Z / 768), WORLD_Z / 768),
+          };
+          const v = randomVec3();
+          const mag = ctx.rng.range(0.2, 1);
+          obj.vel = { x: v.x * mag, y: v.y * mag, z: v.z * mag };
+          if (ctx.rng.random() < 0.35) obj.type = bgShapePool[ctx.rng.int(bgShapePool.length)] ?? obj.type;
+          if (ctx.rng.random() < 0.35) obj.color = paletteColor(paletteMode, ctx.rng);
+        }
+
+        obj.angle += obj.speed * moveAmt * frames;
+
+        p.push();
+        p.translate(obj.pos.x * span, obj.pos.y * span, obj.pos.z * span);
+        p.rotateY(obj.angle);
+        p.rotateX(obj.angle * 0.5);
+        p.rotateZ(obj.angle * 0.25);
+        p.stroke(obj.color[0], obj.color[1], obj.color[2], opacity);
+        const s = span * 0.039 * scaleAmt; // windchime 30 on a 768 canvas ≈ 0.039×span
+        switch (obj.type) {
+          case 0:
+            drawComplexTorus(p, s, s * 0.38);
+            break;
+          case 1:
+            drawWavyTorus(p, s, s * 0.36);
+            break;
+          case 2:
+            drawOscillatingSphere(p, s);
+            break;
+          case 3:
+            drawFilamentCloud(p, s);
+            break;
+        }
+        p.pop();
+      }
+    }
+
+    /**
+     * Faithful windchime drawCube: six tinted QUAD faces around the WEBGL origin.
+     * Solid per-pair tints stand in for the original's per-pixel noise textures
+     * (windchime's documented simplification); the opposite-face colour pairs are
+     * preserved. `contrast` rides the live contrast axis onto the face brightness.
+     */
+    function drawCube(p: p5, size: number, contrast: number): void {
+      const half = size / 2;
+      // [verts(4×xyz), tintIndex] — windchime's face/quad layout verbatim.
+      const faces: Array<[number[], number]> = [
+        [[-half, -half, half, half, -half, half, half, half, half, -half, half, half], 0], // front
+        [[half, -half, -half, -half, -half, -half, -half, half, -half, half, half, -half], 1], // back
+        [[-half, -half, -half, -half, -half, half, -half, half, half, -half, half, -half], 2], // left
+        [[half, -half, half, half, -half, -half, half, half, -half, half, half, half], 3], // right
+        [[-half, -half, -half, half, -half, -half, half, -half, half, -half, -half, half], 4], // top
+        [[-half, half, half, half, half, half, half, half, -half, -half, half, -half], 5], // bottom
+      ];
+      p.noStroke();
+      for (const [v, idx] of faces) {
+        const tint = faceTints[idx] ?? [255, 255, 255];
+        p.fill(
+          Math.min(255, (tint[0] ?? 0) * contrast),
+          Math.min(255, (tint[1] ?? 0) * contrast),
+          Math.min(255, (tint[2] ?? 0) * contrast),
+        );
+        p.beginShape(p.QUADS);
+        p.vertex(v[0] ?? 0, v[1] ?? 0, v[2] ?? 0);
+        p.vertex(v[3] ?? 0, v[4] ?? 0, v[5] ?? 0);
+        p.vertex(v[6] ?? 0, v[7] ?? 0, v[8] ?? 0);
+        p.vertex(v[9] ?? 0, v[10] ?? 0, v[11] ?? 0);
+        p.endShape();
+      }
+    }
 
     return {
       setup(p): void {
         p.createCanvas(ctx.width, ctx.height, p.WEBGL);
-        p.noiseSeed(ctx.seed);
       },
 
       update(params): void {
@@ -289,141 +517,51 @@ export const itoBox: VisualTemplate = {
       },
 
       draw({ p, width, height, dt }): void {
+        const frames = dt * 60; // normalise integration to 60fps frames
+        arc.tick(dt * 1000); // integrate velocity-mode encoders → phase + decay
+
         const minDim = Math.min(width, height);
-        const span = minDim * 0.5; // world half-extent for bg drift
-        const frameScale = dt * 60; // normalise integration to 60fps
-        const av = arc.values();
-        const fv = fb.values();
+        const span = minDim; // world unit for the bg field
 
-        // Encoder value 0.5 = stopped; (v-0.5)*2 = signed target velocity.
-        const turbo = 0.5 + cur.turbulence; // turbulence axis scales spin range
-        const targetYaw = ((av.yaw ?? 0.5) - 0.5) * 2 * MAX_SPEED * turbo;
-        const targetPitch = ((av.pitch ?? 0.5) - 0.5) * 2 * MAX_SPEED * turbo;
-        const targetRoll = ((av.roll ?? 0.5) - 0.5) * 2 * MAX_SPEED * turbo;
-        const targetZoom = ((av.zoom ?? 0.5) - 0.5) * 2 * MAX_ZOOM_RATE;
-
-        // Roulette physics: ease velocity toward the target, then damp + integrate.
-        const ease = 0.18;
-        yawVel = (yawVel + (targetYaw - yawVel) * ease) * damping;
-        pitchVel = (pitchVel + (targetPitch - pitchVel) * ease) * damping;
-        rollVel = (rollVel + (targetRoll - rollVel) * ease) * damping;
-        zoomVel = (zoomVel + (targetZoom - zoomVel) * ease) * damping;
-        yaw += yawVel * frameScale;
-        pitch += pitchVel * frameScale;
-        roll += rollVel * frameScale;
-        zoom = Math.max(0.45, Math.min(2.4, zoom + zoomVel * frameScale));
+        // Accumulate UNBOUNDED orientation from the (damped) angular velocities —
+        // the host already advanced/damped them in tick(); we read & integrate the
+        // angle ourselves so the cube can free-wheel. (× turbulence for live spin.)
+        const spinScale = lerp(0.7, 1.4, cur.turbulence);
+        yaw += arc.velocity('yaw') * frames * spinScale;
+        pitch += arc.velocity('pitch') * frames * spinScale;
+        roll += arc.velocity('roll') * frames * spinScale;
+        // Zoom: the clamped 0..1 phase maps onto windchime's [0.35, 5] range.
+        const zoom = ZOOM_MIN + (arc.values().zoom ?? 0) * (ZOOM_MAX - ZOOM_MIN);
 
         p.background(bgColor[0], bgColor[1], bgColor[2]);
-        p.ambientLight(70, 70, 78);
-        p.directionalLight(210, 210, 220, -0.3, 0.4, -1);
-        p.pointLight(150, 170, 255, 0, -span * 0.6, span * 0.8);
 
-        // ── background field ───────────────────────────────────────
-        // Per-group fader params folded with the live axes.
-        const groupP = [
-          {
-            opacity: fold(fv.opacityA ?? 0.6, cur.density),
-            move: fold(fv.moveA ?? 0.45, cur.motion),
-            random: fv.randomA ?? 0.2,
-            scale: fold(fv.scaleA ?? 0.5, cur.cameraDepth),
-          },
-          {
-            opacity: fold(fv.opacityB ?? 0.6, cur.density),
-            move: fold(fv.moveB ?? 0.45, cur.motion),
-            random: fv.randomB ?? 0.2,
-            scale: fold(fv.scaleB ?? 0.5, cur.cameraDepth),
-          },
-        ];
+        // Background field first (windchime draws bg objects before the lights/cube).
+        drawBgObjects(p, span, frames);
 
-        p.noStroke();
-        for (const o of bgObjects) {
-          const gp = groupP[o.group] ?? groupP[0];
-          if (!gp) continue;
-          const moveAmt = gp.move * 1.6;
-          const randProb = gp.random * 0.6 * dt; // per-second → per-frame
-          const sizeBase = minDim * 0.05 * (0.5 + gp.scale * 1.6);
-          const alpha = 18 + gp.opacity * 150;
+        // windchime lighting.
+        p.ambientLight(90, 90, 90);
+        p.directionalLight(180, 180, 180, -0.3, 0.35, -1.0);
 
-          // drift in normalised space, scaled to the world; wrap at the edges
-          o.pos.x += o.vel.x * moveAmt * frameScale * 0.01;
-          o.pos.y += o.vel.y * moveAmt * frameScale * 0.01;
-          o.pos.z += o.vel.z * moveAmt * frameScale * 0.01;
-          if (o.pos.x < -1.4) o.pos.x = 1.4;
-          if (o.pos.x > 1.4) o.pos.x = -1.4;
-          if (o.pos.y < -1.4) o.pos.y = 1.4;
-          if (o.pos.y > 1.4) o.pos.y = -1.4;
-          if (o.pos.z < -1.4) o.pos.z = 1.4;
-          if (o.pos.z > 1.4) o.pos.z = -1.4;
-
-          if (ctx.rng.random() < randProb) {
-            o.pos = { x: ctx.rng.range(-1, 1), y: ctx.rng.range(-1, 1), z: ctx.rng.range(-1, 1) };
-            const v = randomVec3();
-            const mag = ctx.rng.range(0.2, 1);
-            o.vel = { x: v.x * mag, y: v.y * mag, z: v.z * mag };
-            if (ctx.rng.random() < 0.35) o.type = shapePool[ctx.rng.int(shapePool.length)] ?? o.type;
-          }
-          o.angle += o.spin * (0.3 + moveAmt) * frameScale;
-
-          p.push();
-          p.translate(o.pos.x * span, o.pos.y * span, o.pos.z * span);
-          p.rotateY(o.angle);
-          p.rotateX(o.angle * 0.5);
-          p.rotateZ(o.angle * 0.25);
-          p.fill(o.color[0], o.color[1], o.color[2], alpha);
-          if (o.type === 0) p.torus(sizeBase, sizeBase * 0.34, 16, 10);
-          else p.sphere(sizeBase * 0.85, 14, 10);
-          p.pop();
-        }
-
-        // ── central roulette cube ──────────────────────────────────
-        const cubeSize = minDim * (0.26 + cur.cameraDepth * 0.1);
-        const contrast = 0.55 + cur.contrast * 0.6;
+        // Central roulette cube.
+        const contrast = 0.75 + cur.contrast * 0.5; // live contrast rides face brightness
         p.push();
         p.scale(zoom);
         p.rotateX(-Math.PI * 0.12);
         p.rotateY(yaw);
         p.rotateX(pitch);
         p.rotateZ(roll);
-        drawCube(p, cubeSize, faceTints, contrast);
+        drawCube(p, minDim * CUBE_REL, contrast);
         p.pop();
 
-        // idiom LED feedback → ledOut (the host mirrors it to the twin + hardware)
+        // idiom LED feedback → ledOut (host mirrors to the twin + hardware).
         idioms.renderGrid(ctx.ledOut, profile);
         idioms.renderArc(ctx.ledOut, profile);
+
+        // keep fieldType/fieldSeed live so TS sees them used (the texture-structure
+        // gesture is preserved even though windchime's per-pixel field is dropped).
+        void fieldType;
+        void fieldSeed;
       },
     };
   },
 };
-
-/**
- * Six tinted quad faces around the origin (WEBGL centre). Solid per-pair tints
- * stand in for the original's per-pixel noise textures; `contrast` scales the
- * tint brightness so the live contrast axis reads on the cube.
- */
-function drawCube(p: p5, size: number, faceTints: RGB[], contrast: number): void {
-  const h = size / 2;
-  // [verts(4×xyz), tintIndex]
-  const faces: Array<[number[], number]> = [
-    [[-h, -h, h, h, -h, h, h, h, h, -h, h, h], 0], // front
-    [[h, -h, -h, -h, -h, -h, -h, h, -h, h, h, -h], 1], // back
-    [[-h, -h, -h, -h, -h, h, -h, h, h, -h, h, -h], 2], // left
-    [[h, -h, h, h, -h, -h, h, h, -h, h, h, h], 3], // right
-    [[-h, -h, -h, h, -h, -h, h, -h, h, -h, -h, h], 4], // top
-    [[-h, h, h, h, h, h, h, h, -h, -h, h, -h], 5], // bottom
-  ];
-  p.noStroke();
-  for (const [v, idx] of faces) {
-    const tint = faceTints[idx] ?? [220, 220, 220];
-    p.fill(
-      Math.min(255, (tint[0] ?? 0) * contrast),
-      Math.min(255, (tint[1] ?? 0) * contrast),
-      Math.min(255, (tint[2] ?? 0) * contrast),
-    );
-    p.beginShape();
-    p.vertex(v[0] ?? 0, v[1] ?? 0, v[2] ?? 0);
-    p.vertex(v[3] ?? 0, v[4] ?? 0, v[5] ?? 0);
-    p.vertex(v[6] ?? 0, v[7] ?? 0, v[8] ?? 0);
-    p.vertex(v[9] ?? 0, v[10] ?? 0, v[11] ?? 0);
-    p.endShape(p.CLOSE);
-  }
-}

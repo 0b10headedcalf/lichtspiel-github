@@ -38,6 +38,14 @@ for (const file of files) {
   } else {
     console.log(`✓ ${id} (${rendererMatch[1]}) — ${file}`);
   }
+  // An idiom-driven template must also ship a gestural dictionary, so its
+  // control map shows in the on-screen gestural panel (the Phase-4.5 contract).
+  const declaresIdioms = /\bidioms:\s*\[/.test(src);
+  const declaresGestural = /\bgestural:\s*\{/.test(src);
+  if (declaresIdioms && !declaresGestural) {
+    console.error(`✗ ${id}: declares idioms but no gestural dictionary`);
+    failures++;
+  }
 }
 
 const indexSrc = readFileSync(join(tplDir, 'index.ts'), 'utf8');
