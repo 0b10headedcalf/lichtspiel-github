@@ -61,6 +61,25 @@ const twin = new MonomeTwin(twinEl, bus, devices, sendLedFrame);
 const host = new SketchHost({
   parent: stage,
   getSize: () => ({ width: window.innerWidth, height: window.innerHeight }),
+  getSetup: () => devices.active(),
+  // Hardware-driven scene/variant control for idiom sketches (e.g. the Opus III
+  // hero's extra grid-128 columns → scene-select). selectScene/doVariant are
+  // hoisted function declarations; host is assigned before any sketch calls these.
+  controls: {
+    selectSceneIndex: (i) => {
+      const t = registry.at(i);
+      if (t) selectScene(t, true);
+    },
+    nextScene: () => {
+      const t = registry.neighbor(host.currentTemplateId(), 1);
+      if (t) selectScene(t, true);
+    },
+    prevScene: () => {
+      const t = registry.neighbor(host.currentTemplateId(), -1);
+      if (t) selectScene(t, true);
+    },
+    variant: () => doVariant(),
+  },
   onFrame: ({ fps, params, templateId }) => {
     debug.setTemplateName(registry.get(templateId)?.name ?? templateId);
     debug.updateFrame(fps, params);
@@ -124,16 +143,21 @@ const mapping = createMonomeMapping(() => devices.active(), {
   surprise: () => doSurprise(),
 });
 
+// Idiom-vs-global-mapping gate: when the active template declares `idioms`, its
+// sketch owns grid/arc events (via its idiom layer), so we SKIP the global
+// column-fader mapping for them. The global mapping stays the fallback for the
+// legacy visual-only templates that declare no idioms.
+const usesIdioms = (): boolean => (host.current()?.idioms?.length ?? 0) > 0;
 bus.on('monome.grid', (e) => {
-  mapping.onGrid(e);
+  if (!usesIdioms()) mapping.onGrid(e);
   host.dispatchGridKey(e);
 });
 bus.on('monome.arcDelta', (e) => {
-  mapping.onArcDelta(e);
+  if (!usesIdioms()) mapping.onArcDelta(e);
   host.dispatchArcDelta(e);
 });
 bus.on('monome.arcKey', (e) => {
-  mapping.onArcKey(e);
+  if (!usesIdioms()) mapping.onArcKey(e);
   host.dispatchArcKey(e);
 });
 
@@ -146,6 +170,7 @@ bus.on('device.detached', (d) => devices.detach(d));
 bus.on('monome.setup', (s) => devices.setSimulated(s));
 devices.onChange((active, src) => {
   twin.setSetup(active);
+  host.setProfile(active); // hot-swap: reshape the active sketch's idioms in place
   console.info(`[lichtspiel] monome (${src}) → ${describeSetup(active)}`);
 });
 
@@ -173,6 +198,23 @@ function doSurprise(): void {
   host.setTargetParams(mutateParams(host.targetParams(), rng, { amount: 0.5 }));
 }
 
+/** Re-mount the current scene as a new STRUCTURAL variant (same template, new seed). */
+function doVariant(): void {
+  const t = host.current();
+  if (!t) return;
+  const seed = randomSeed();
+  const rng = createRng(seed);
+  // The live 'mutation amount' rides the structural divergence; always do
+  // something noticeable on an explicit 'v'.
+  const divergence = Math.max(0.3, host.targetParams().mutationAmount);
+  const config = t.variants?.generate(rng, seed, divergence) ?? {};
+  const keep: Partial<VisualParamVector> = {
+    semanticDistance: host.targetParams().semanticDistance,
+    mutationAmount: host.targetParams().mutationAmount,
+  };
+  host.mount(t, { seed, config, params: keep });
+}
+
 installKeyboard({
   selectIndex: (i) => {
     const t = registry.at(i);
@@ -193,6 +235,7 @@ installKeyboard({
   },
   randomize: doRandomize,
   surprise: doSurprise,
+  variant: doVariant,
   toggleDebug: () => debug.toggle(),
   toggleEmulator: () => twin.toggle(),
 });

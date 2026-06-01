@@ -14,6 +14,8 @@ export interface KeyboardHandlers {
   toggleLock(): void;
   randomize(): void;
   surprise(): void;
+  /** Re-mount the current scene as a new structural variant. */
+  variant(): void;
   toggleDebug(): void;
   toggleEmulator(): void;
 }
@@ -66,6 +68,9 @@ export function installKeyboard(h: KeyboardHandlers): () => void {
       case 'KeyS':
         h.surprise();
         break;
+      case 'KeyV':
+        h.variant();
+        break;
       case 'KeyN':
         h.next();
         break;
@@ -92,6 +97,6 @@ export const KEYBOARD_HELP = [
   '1–5 select scene · n/p next/prev',
   '← → semantic distance · ↑ ↓ mutation',
   '[ ] density · - = motion',
-  'space lock · r randomize · s surprise',
+  'space lock · r randomize · s surprise · v variant',
   'd debug · g monome twin',
 ].join('\n');

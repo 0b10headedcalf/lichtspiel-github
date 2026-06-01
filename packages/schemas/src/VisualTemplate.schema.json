@@ -27,6 +27,15 @@
       }
     },
     "renderer": { "enum": ["p2d", "webgl"] },
-    "sourceLineage": { "type": "string" }
+    "sourceLineage": { "type": "string" },
+    "hardwareTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "grid": { "enum": ["64", "128", "any"] },
+        "arc": { "enum": ["2", "4", "any"] }
+      }
+    },
+    "idioms": { "type": "array", "items": { "type": "string" } }
   }
 }

@@ -12,6 +12,7 @@ import {
   type GridKeyEvent,
   type LedFrame,
   type LiveSessionState,
+  type MonomeSetup,
   type VisualParamVector,
   DEFAULT_PARAMS as DEFAULTS,
   createLedFrame,
@@ -19,19 +20,39 @@ import {
   mergeParams,
 } from '@lichtspiel/schemas';
 import { createRng, randomSeed } from './seededRng.js';
-import type { DrawContext, MountContext, VisualSketch, VisualTemplate } from './visualTemplate.js';
+import type {
+  DrawContext,
+  HostControls,
+  MountContext,
+  VisualSketch,
+  VisualTemplate,
+} from './visualTemplate.js';
+
+const NO_SETUP: MonomeSetup = { grid: null, arc: null };
+const NOOP_CONTROLS: HostControls = {
+  selectSceneIndex: () => {},
+  nextScene: () => {},
+  prevScene: () => {},
+  variant: () => {},
+};
 
 export interface MountOptions {
   seed?: number;
   config?: Record<string, unknown>;
   /** Params to apply at mount (merged over the template's defaults). */
   params?: Partial<VisualParamVector>;
+  /** Select an alternative implementation (VisualTemplate.altImpls) by id. */
+  impl?: string;
 }
 
 export interface SketchHostOptions {
   parent: HTMLElement;
   /** Returns the desired canvas size; re-queried on window resize. */
   getSize?: () => { width: number; height: number };
+  /** Returns the active monome setup; read at mount + forwarded on setProfile. */
+  getSetup?: () => MonomeSetup;
+  /** Host actions a sketch may invoke from hardware (scene/variant control). */
+  controls?: HostControls;
   /** Called after the active sketch mutates ledOut (for the emulator/bridge). */
   onLedFrameDirty?: (frame: LedFrame) => void;
   /** Called once per rendered frame with fps + smoothed params. */
@@ -43,9 +64,12 @@ export interface SketchHostOptions {
 export class SketchHost {
   private readonly parent: HTMLElement;
   private readonly getSize: () => { width: number; height: number };
+  private readonly getSetup: () => MonomeSetup;
+  private readonly controls: HostControls;
   private readonly onLedFrameDirty: ((frame: LedFrame) => void) | undefined;
   private readonly onFrame: SketchHostOptions['onFrame'];
   private readonly tau: number;
+  private setup: MonomeSetup = NO_SETUP;
 
   private template: VisualTemplate | null = null;
   private sketch: VisualSketch | null = null;
@@ -63,9 +87,12 @@ export class SketchHost {
   constructor(opts: SketchHostOptions) {
     this.parent = opts.parent;
     this.getSize = opts.getSize ?? (() => ({ width: window.innerWidth, height: window.innerHeight }));
+    this.getSetup = opts.getSetup ?? (() => NO_SETUP);
+    this.controls = opts.controls ?? NOOP_CONTROLS;
     this.onLedFrameDirty = opts.onLedFrameDirty;
     this.onFrame = opts.onFrame;
     this.tau = opts.smoothingTau ?? 0.12;
+    this.setup = this.getSetup();
     // Initialized properly on first mount.
     this.target = { ...DEFAULTS };
     this.smoothed = { ...DEFAULTS };
@@ -98,6 +125,7 @@ export class SketchHost {
   }
 
   private teardown(): void {
+    const had = this.instance !== null;
     try {
       this.sketch?.dispose?.();
     } catch (err) {
@@ -106,11 +134,34 @@ export class SketchHost {
     this.instance?.remove();
     this.sketch = null;
     this.instance = null;
+    // Clear LEDs on scene teardown so an idiom sketch's last frame doesn't
+    // linger on the grid/arc under the next scene.
+    if (had) this.clearLeds();
+  }
+
+  /** Zero the LED frame + emit it, so hardware/twin clear stale feedback. */
+  private clearLeds(): void {
+    for (const row of this.ledOut.grid) row.fill(0);
+    for (const ring of this.ledOut.arc) ring.fill(0);
+    this.ledOut.gridDirty = true;
+    for (let i = 0; i < this.ledOut.arcDirty.length; i++) this.ledOut.arcDirty[i] = true;
+    this.onLedFrameDirty?.(this.ledOut);
+  }
+
+  /** The active monome setup changed (hot-swap) — reshape the sketch in place. */
+  setProfile(setup: MonomeSetup): void {
+    this.setup = setup;
+    try {
+      this.sketch?.setProfile?.(setup);
+    } catch (err) {
+      console.error('[host] sketch.setProfile threw', err);
+    }
   }
 
   mount(template: VisualTemplate, opts: MountOptions = {}): void {
     this.teardown();
     this.template = template;
+    this.setup = this.getSetup();
 
     const seed = opts.seed ?? randomSeed();
     const rng = createRng(seed);
@@ -134,9 +185,15 @@ export class SketchHost {
       initialParams: { ...this.target },
       initialLive: this.live,
       ledOut: this.ledOut,
+      setup: this.setup,
+      controls: this.controls,
     };
 
-    const sketch = template.create(ctx);
+    // Pick an alternative implementation if requested, else the canonical one.
+    const factory =
+      (opts.impl ? template.altImpls?.find((a) => a.id === opts.impl)?.create : undefined) ??
+      template.create;
+    const sketch = factory(ctx);
     this.frame = 0;
     this.lastTimeMs = 0;
 

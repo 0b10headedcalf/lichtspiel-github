@@ -14,6 +14,17 @@ import type { VisualParamRanges, VisualParamVector } from './visualParams.js';
 /** Which p5 renderer the template's canvas uses. */
 export type TemplateRenderer = 'p2d' | 'webgl';
 
+/**
+ * The monome combo a template was authored for. Advisory only — every template
+ * still adapts to whatever is connected (via the idiom layer) — but it records
+ * the bespoke hardware a sketch was designed around (e.g. the Opus III hero on a
+ * Grid 64 / Arc 2) so UIs can surface "native on …" and retrieval can prefer it.
+ */
+export interface HardwareTarget {
+  grid?: '64' | '128' | 'any';
+  arc?: '2' | '4' | 'any';
+}
+
 export interface VisualTemplateMeta {
   id: string;
   name: string;
@@ -28,6 +39,10 @@ export interface VisualTemplateMeta {
   renderer?: TemplateRenderer;
   /** Provenance: the Processing/Windchime source this was adapted from, if any. */
   sourceLineage?: string;
+  /** The monome combo this template was authored for (advisory; it adapts to any). */
+  hardwareTarget?: HardwareTarget;
+  /** Names of the monome idiom(s) this template drives (faderBank, stepSequencer, …). */
+  idioms?: string[];
 }
 
 /** A descriptor entry used by metadata retrieval (Phase 5). */

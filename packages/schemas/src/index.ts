@@ -13,6 +13,7 @@ export * from './monomeProfiles.js';
 export * from './retrieval.js';
 export * from './wire.js';
 export * from './visualTemplate.js';
+export * from './variants.js';
 
 // NOTE: this entry is browser-safe (no Node built-ins). The JSON-schema
 // file loaders that need `node:url`/`fs` live in `@lichtspiel/schemas/node`.

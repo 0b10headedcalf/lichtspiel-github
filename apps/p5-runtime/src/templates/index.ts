@@ -9,6 +9,7 @@ import { topographicTunnel } from './topographicTunnel.js';
 import { gridWorld } from './gridWorld.js';
 import { parquetGlitch } from './parquetGlitch.js';
 import { torusField } from './torusField.js';
+import { lichtspielOpus } from './lichtspielOpus.js';
 
 export const TEMPLATES: readonly VisualTemplate[] = [
   minimalPulse,
@@ -16,6 +17,7 @@ export const TEMPLATES: readonly VisualTemplate[] = [
   gridWorld,
   parquetGlitch,
   torusField,
+  lichtspielOpus,
 ];
 
-export { minimalPulse, topographicTunnel, gridWorld, parquetGlitch, torusField };
+export { minimalPulse, topographicTunnel, gridWorld, parquetGlitch, torusField, lichtspielOpus };

@@ -117,6 +117,18 @@ function checkProfile(tag: string, setup: MonomeSetup): void {
     ok(Math.abs(tog.values().t - 1 / 3) < 1e-9, 'faderBank toggle step 1 of 4 → 1/3');
   }
 
+  // faderBank — spread:false confines the bank to lanes.length columns, leaving
+  // the rest dark + input-free (e.g. a Grid 128's scene-select region).
+  {
+    const bank = createFaderBank({ spread: false, lanes: [{ name: 'a' }, { name: 'b' }] });
+    bank.setProfile(profile);
+    const f = createLedFrame();
+    bank.renderGrid(f, profile);
+    let beyond = 0;
+    for (let y = 0; y < profile.rows; y++) for (let x = 2; x < profile.cols; x++) beyond += f.grid[y]?.[x] ?? 0;
+    ok(beyond === 0, `faderBank spread:false leaves cols ≥ lanes dark (${profile.cols - 2} cols)`);
+  }
+
   // stepSequencer — steps == cols (16 on Grid 128, 8 on Grid 64); toggle + advance.
   {
     const seq = createStepSequencer();

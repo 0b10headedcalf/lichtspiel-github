@@ -65,8 +65,13 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
   /** Columns per lane for a given grid width (1 on a tight fit, wider when spread). */
   const widthFor = (cols: number): number =>
     spread ? Math.max(1, Math.floor(cols / Math.max(1, lanes.length))) : 1;
-  const laneAt = (x: number, cols: number): number =>
-    Math.min(lanes.length - 1, Math.max(0, Math.floor(x / widthFor(cols))));
+  /** Columns the bank occupies: the whole grid when spread, else one per lane. */
+  const occupiedCols = (cols: number): number => (spread ? cols : Math.min(cols, lanes.length));
+  /** Lane under column x, or -1 if x is outside the bank (free for other use). */
+  const laneAt = (x: number, cols: number): number => {
+    if (x < 0 || x >= occupiedCols(cols)) return -1;
+    return Math.min(lanes.length - 1, Math.floor(x / widthFor(cols)));
+  };
 
   const apply = (lane: LaneState, y: number): void => {
     const rows = profile.rows;
@@ -85,6 +90,7 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
     onGridKey(e: GridKeyEvent): void {
       if (profile.cols <= 0 || e.x < 0 || e.x >= profile.cols) return;
       const idx = laneAt(e.x, profile.cols);
+      if (idx < 0) return; // outside the bank (e.g. a Grid 128's scene-select columns)
       const lane = lanes[idx];
       if (!lane) return;
       if (e.state === 1) {
@@ -97,15 +103,14 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
 
     renderGrid(frame: LedFrame, p: IdiomProfile): void {
       const { rows, cols } = p;
-      const w = widthFor(cols);
       for (let y = 0; y < rows; y++) {
         const row = frame.grid[y];
         if (!row) continue;
         for (let x = 0; x < cols; x++) {
-          const idx = Math.min(lanes.length - 1, Math.max(0, Math.floor(x / w)));
-          const lane = lanes[idx];
+          const idx = laneAt(x, cols);
+          const lane = idx >= 0 ? lanes[idx] : undefined;
           if (!lane) {
-            row[x] = 0;
+            row[x] = 0; // outside the bank (scene-select columns, etc.)
             continue;
           }
           if (lane.mode === 'select') {
