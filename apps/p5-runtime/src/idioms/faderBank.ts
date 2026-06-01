@@ -60,17 +60,28 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
     value: clamp01(l.initial ?? 0.5),
     step: 0,
   }));
-  const held = new Set<number>(); // lane indices currently pressed
+  const held = new Set<number>(); // physical columns currently pressed
 
   /** Columns per lane for a given grid width (1 on a tight fit, wider when spread). */
   const widthFor = (cols: number): number =>
     spread ? Math.max(1, Math.floor(cols / Math.max(1, lanes.length))) : 1;
-  /** Columns the bank occupies: the whole grid when spread, else one per lane. */
-  const occupiedCols = (cols: number): number => (spread ? cols : Math.min(cols, lanes.length));
-  /** Lane under column x, or -1 if x is outside the bank (free for other use). */
-  const laneAt = (x: number, cols: number): number => {
-    if (x < 0 || x >= occupiedCols(cols)) return -1;
-    return Math.min(lanes.length - 1, Math.floor(x / widthFor(cols)));
+  /**
+   * The logical lanes a physical column drives. Spread → one lane (its panel).
+   * Else 1:1 while the lanes fit; when there are MORE lanes than columns the bank
+   * FOLDS — column x drives lanes {x, x+cols, x+2cols, …} (all set to the same
+   * value), so a 16-lane sketch still controls every lane on a Grid 64, in pairs.
+   * Returns [] for a column outside the bank (e.g. a Grid 128's scene-select cols).
+   */
+  const coveredLanes = (x: number, cols: number): number[] => {
+    if (x < 0 || x >= cols) return [];
+    if (spread) {
+      const idx = Math.min(lanes.length - 1, Math.floor(x / widthFor(cols)));
+      return idx >= 0 ? [idx] : [];
+    }
+    if (lanes.length <= cols) return x < lanes.length ? [x] : [];
+    const out: number[] = [];
+    for (let l = x; l < lanes.length; l += cols) out.push(l);
+    return out;
   };
 
   const apply = (lane: LaneState, y: number): void => {
@@ -89,15 +100,16 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
 
     onGridKey(e: GridKeyEvent): void {
       if (profile.cols <= 0 || e.x < 0 || e.x >= profile.cols) return;
-      const idx = laneAt(e.x, profile.cols);
-      if (idx < 0) return; // outside the bank (e.g. a Grid 128's scene-select columns)
-      const lane = lanes[idx];
-      if (!lane) return;
+      const targets = coveredLanes(e.x, profile.cols);
+      if (targets.length === 0) return; // outside the bank (scene-select columns)
       if (e.state === 1) {
-        apply(lane, e.y);
-        held.add(idx);
+        for (const idx of targets) {
+          const lane = lanes[idx];
+          if (lane) apply(lane, e.y); // fold: all covered lanes get the same value
+        }
+        held.add(e.x);
       } else {
-        held.delete(idx);
+        held.delete(e.x);
       }
     },
 
@@ -107,17 +119,17 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
         const row = frame.grid[y];
         if (!row) continue;
         for (let x = 0; x < cols; x++) {
-          const idx = laneAt(x, cols);
-          const lane = idx >= 0 ? lanes[idx] : undefined;
+          const idx = coveredLanes(x, cols)[0]; // the column's primary lane
+          const lane = idx !== undefined ? lanes[idx] : undefined;
           if (!lane) {
             row[x] = 0; // outside the bank (scene-select columns, etc.)
             continue;
           }
           if (lane.mode === 'select') {
             const selRow = Math.round((rows - 1) * (1 - lane.value));
-            row[x] = y === selRow ? 15 : held.has(idx) ? 4 : 0;
+            row[x] = y === selRow ? 15 : held.has(x) ? 4 : 0;
           } else {
-            row[x] = faderBarLevel(y, rows, lane.value, held.has(idx));
+            row[x] = faderBarLevel(y, rows, lane.value, held.has(x));
           }
         }
       }

@@ -129,6 +129,23 @@ function checkProfile(tag: string, setup: MonomeSetup): void {
     ok(beyond === 0, `faderBank spread:false leaves cols ≥ lanes dark (${profile.cols - 2} cols)`);
   }
 
+  // faderBank — folds when lanes > cols: column x drives lanes {x, x+cols, …},
+  // so a 16-lane sketch still reaches every lane on a Grid 64 (in pairs).
+  {
+    const wide = createFaderBank({
+      spread: false,
+      lanes: Array.from({ length: profile.cols * 2 }, (_, i) => ({ name: `w${i}`, initial: 0 })),
+    });
+    wide.setProfile(profile);
+    wide.onGridKey(gk(0, 0, 1)); // press col 0, top row → value 1
+    wide.onGridKey(gk(0, 0, 0));
+    const v = wide.values();
+    ok(
+      v.w0 === 1 && v[`w${profile.cols}`] === 1,
+      `faderBank folds col 0 → lanes 0 + ${profile.cols} (both reach 1)`,
+    );
+  }
+
   // stepSequencer — steps == cols (16 on Grid 128, 8 on Grid 64); toggle + advance.
   {
     const seq = createStepSequencer();
