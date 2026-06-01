@@ -299,14 +299,14 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
           const li = cur * P + ph;
           if (li < encs.length) onPage.push(`enc ${ph} = ${turnLabel(li)}`);
         }
-        arc.push({ area: `enc 0–${P - 1}`, action: 'turn', effect: `page ${cur + 1} of ${pages} — ${onPage.join(' · ')}` });
+        arc.push({ area: `enc 0–${P - 1}`, action: 'turn', effect: onPage.join(' · ') });
         arc.push({ area: 'both encoders', action: 'press together', effect: 'switch to the next page of encoder controls' });
         for (let ph = 0; ph < P; ph++) {
           const li = cur * P + ph;
           const pl = pressLabel(li);
           if (pl) arc.push({ area: `enc ${ph}`, action: 'press', effect: pl });
         }
-        return { grid: [], arc };
+        return { grid: [], arc, page: { index: cur, total: pages } };
       }
 
       for (let ph = 0; ph < P; ph++) {
@@ -330,7 +330,7 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
           arc.push({ area: `enc ${ph}`, action: 'press', effect: eff ?? 'action' });
         }
       }
-      return { grid: [], arc };
+      return { grid: [], arc, page: { index: 0, total: 1 } };
     },
 
     renderArc(frame: LedFrame, p: IdiomProfile): void {

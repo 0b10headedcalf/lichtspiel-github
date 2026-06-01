@@ -101,7 +101,7 @@ export const patternGridWorld: VisualTemplate = {
   gestural: {
     name: 'Neural Grid + Hypnotic Border',
     summary:
-      'A 3D cube grid — un-pressed cells flicker; pressing a cell cycles its brightness 0→15 (and picks its lit depth layer). Arc encoders set the alpha + brightness curves; enc 2 press toggles a pulsing border. On an Arc 2 the presses fold: enc 0 cycles resting-colour → bg/border, enc 1 re-rolls the active colour.',
+      'A 3D cube grid — un-pressed cells flicker; pressing a cell cycles its brightness 0→15 (and picks its lit depth layer). Arc encoders set the alpha / brightness / opacity curves; their presses re-roll the resting / active / connection colours + toggle a pulsing border. On an Arc 2 the encoders PAGE: page 1 = resting + active alpha, page 2 = background + connection — press both encoders together to flip the page.',
     grid: [
       { area: 'any cell', action: 'press', effect: 'cycle that cell\'s brightness 0→15 + stop its flicker' },
       { area: 'un-pressed cells', action: 'idle', effect: 'random brightness flicker (speed = flicker variant)' },
@@ -110,7 +110,7 @@ export const patternGridWorld: VisualTemplate = {
       { area: 'enc 0', action: 'turn / press', effect: 'resting-cube alpha · press re-rolls the resting colour' },
       { area: 'enc 1', action: 'turn / press', effect: 'active-cube alpha · press re-rolls the active colour' },
       { area: 'enc 2', action: 'turn / press', effect: 'background brightness · press randomises bg + toggles the border' },
-      { area: 'enc 3', action: 'turn', effect: 'connection-line opacity' },
+      { area: 'enc 3', action: 'turn / press', effect: 'connection-line opacity · press re-rolls the connection colour' },
     ],
   },
   variants,
@@ -131,14 +131,17 @@ export const patternGridWorld: VisualTemplate = {
       flickerDensity: 0.4,
       rng: () => ctx.rng.random(),
     });
-    // On an Arc 2 the turns couple: enc0 → resting-alpha + bg, enc1 → active-alpha +
-    // connection-opacity (so every encoder visibly does something); presses cycle.
+    // 4 DISTINCT controls — on an Arc 2 they PAGE (press both encoders to flip):
+    // page 1 = resting + active alpha (presses re-roll those colours), page 2 = bg
+    // brightness/border + connection opacity/colour. Each encoder drives ONE distinct
+    // thing per page (no averaging — fixes "enc 1 does nothing on some variants").
     const arc: ArcMacros = createArcMacros({
+      fold: 'page',
       encoders: [
         { name: 'restAlpha', label: 'resting-cube alpha', pressLabel: 're-roll the resting colour', initial: 0.5, led: 'fillNotched', onPress: () => (restingRgb = gridPalette(paletteMode, ctx.rng).resting) },
         { name: 'actAlpha', label: 'active-cube alpha', pressLabel: 're-roll the active colour', initial: 0.7, led: 'fillNotched', onPress: () => (activeRgb = gridPalette(paletteMode, ctx.rng).active) },
         { name: 'bg', label: 'background brightness', pressLabel: 'randomise bg + toggle the border', initial: 0.5, led: 'fillNotched', onPress: () => toggleBorder() },
-        { name: 'conn', label: 'connection-line opacity', initial: 0.6, led: 'fillNotched' },
+        { name: 'conn', label: 'connection-line opacity', pressLabel: 're-roll the connection colour', initial: 0.6, led: 'fillNotched', onPress: () => (connRgb = gridPalette(paletteMode, ctx.rng).active) },
       ],
     });
     const idioms: ComposedIdiom = composeIdioms([paint, arc]);
@@ -147,6 +150,7 @@ export const patternGridWorld: VisualTemplate = {
     const base = gridPalette(paletteMode, ctx.rng);
     let restingRgb: Rgb = base.resting;
     let activeRgb: Rgb = base.active;
+    let connRgb: Rgb = base.active; // connection-line colour (enc 'conn' press re-rolls)
     let bgBase: Rgb = [0, 0, 0];
     let borderOn = false;
     let borderShape = 0;
@@ -289,7 +293,7 @@ export const patternGridWorld: VisualTemplate = {
             connections.splice(i, 1);
             continue;
           }
-          p.stroke(activeRgb[0], activeRgb[1], activeRgb[2], connOpacity);
+          p.stroke(connRgb[0], connRgb[1], connRgb[2], connOpacity);
           p.line(conn.a[0], conn.a[1], conn.a[2], conn.b[0], conn.b[1], conn.b[2]);
         }
 

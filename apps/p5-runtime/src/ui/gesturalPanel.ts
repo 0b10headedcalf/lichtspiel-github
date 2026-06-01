@@ -19,6 +19,7 @@ export class GesturalPanel {
   private readonly root: HTMLElement;
   private readonly titleEl: HTMLElement;
   private readonly hardwareEl: HTMLElement;
+  private readonly pageEl: HTMLElement;
   private readonly summaryEl: HTMLElement;
   private readonly gridEl: HTMLElement;
   private readonly arcEl: HTMLElement;
@@ -26,6 +27,7 @@ export class GesturalPanel {
   private collapsed = true;
   private dict: GesturalDictionary | undefined;
   private live: GesturalControlMap | null = null;
+  private liveSig = '';
 
   constructor(parent: HTMLElement = document.body) {
     this.root = el('div', 'gestural-panel collapsed');
@@ -39,6 +41,7 @@ export class GesturalPanel {
 
     this.variantEl = el('div', 'gp-variant');
     this.hardwareEl = el('div', 'gp-hardware');
+    this.pageEl = el('div', 'gp-page');
 
     const body = el('div', 'gp-body');
     this.summaryEl = el('div', 'gp-summary');
@@ -46,7 +49,7 @@ export class GesturalPanel {
     this.arcEl = el('div', 'gp-section');
     body.append(this.summaryEl, this.gridEl, this.arcEl);
 
-    this.root.append(header, this.variantEl, this.hardwareEl, body);
+    this.root.append(header, this.variantEl, this.hardwareEl, this.pageEl, body);
     parent.appendChild(this.root);
   }
 
@@ -70,6 +73,11 @@ export class GesturalPanel {
 
   /** Set the LIVE hardware-resolved control map (preferred over the static dict). */
   setControlMap(map: GesturalControlMap | null): void {
+    // Skip the DOM rebuild when nothing changed (this is polled after every arc key,
+    // most of which don't flip the page) — so only a real change re-renders.
+    const sig = map ? JSON.stringify([map.hardware, map.page, map.grid, map.arc]) : '';
+    if (sig === this.liveSig) return;
+    this.liveSig = sig;
     this.live = map;
     this.render();
   }
@@ -93,6 +101,7 @@ export class GesturalPanel {
     if (!this.dict && !this.live) {
       this.titleEl.textContent = '— global column-fader';
       this.hardwareEl.textContent = '';
+      this.pageEl.textContent = '';
       this.summaryEl.textContent = 'No gestural map for this scene (legacy mapping).';
       this.gridEl.innerHTML = '';
       this.arcEl.innerHTML = '';
@@ -102,6 +111,10 @@ export class GesturalPanel {
     this.summaryEl.textContent = this.dict?.summary ?? '';
     // Live map (hardware-accurate) wins; fall back to the authored dictionary.
     this.hardwareEl.textContent = this.live ? `▶ ${this.live.hardware}` : '';
+    // Active encoder page (always shown when there's a live arc — "1 / 1" if no paging).
+    const pg = this.live?.page;
+    this.pageEl.textContent =
+      pg && (this.live?.arc.length ?? 0) > 0 ? `encoder page ${pg.index + 1} / ${pg.total}` : '';
     const grid = this.live?.grid ?? this.dict?.grid ?? [];
     const arc = this.live?.arc ?? this.dict?.arc ?? [];
     this.renderSection(this.gridEl, 'grid', grid);

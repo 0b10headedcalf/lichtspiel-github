@@ -55,6 +55,11 @@ export interface GesturalControlMap {
   hardware: string;
   grid: GesturalEntry[];
   arc: GesturalEntry[];
+  /**
+   * The active encoder page for sketches whose arc controls PAGE on smaller
+   * hardware (a chord flips the page). `total` is 1 when the sketch doesn't page.
+   */
+  page?: { index: number; total: number };
 }
 
 export interface VisualTemplateMeta {

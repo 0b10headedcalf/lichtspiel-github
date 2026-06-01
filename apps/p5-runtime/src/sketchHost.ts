@@ -165,7 +165,7 @@ export class SketchHost {
     try {
       const map = this.sketch?.controlMap?.(this.setup);
       if (!map) return null;
-      return { hardware: describeSetup(this.setup), grid: map.grid, arc: map.arc };
+      return { hardware: describeSetup(this.setup), grid: map.grid, arc: map.arc, page: map.page };
     } catch (err) {
       console.error('[host] sketch.controlMap threw', err);
       return null;

@@ -92,7 +92,11 @@ export interface VisualSketch {
    * `describe()`), for the gestural panel — so it reflects the connected device +
    * any coupling/paging rather than the static authored dictionary. Optional.
    */
-  controlMap?(setup: MonomeSetup): { grid: GesturalEntry[]; arc: GesturalEntry[] };
+  controlMap?(setup: MonomeSetup): {
+    grid: GesturalEntry[];
+    arc: GesturalEntry[];
+    page?: { index: number; total: number };
+  };
 }
 
 export type VisualSketchFactory = (ctx: MountContext) => VisualSketch;

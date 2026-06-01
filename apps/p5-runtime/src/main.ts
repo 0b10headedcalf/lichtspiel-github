@@ -186,6 +186,8 @@ bus.on('monome.arcDelta', (e) => {
 bus.on('monome.arcKey', (e) => {
   if (!usesIdioms()) mapping.onArcKey(e);
   host.dispatchArcKey(e);
+  // A chord may have flipped the encoder page — refresh the panel (no-op if unchanged).
+  panel.setControlMap(host.describeControls());
 });
 
 // Device detection → adapt. Real hardware (serialosc device.attached/detached)

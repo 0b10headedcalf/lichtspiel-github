@@ -103,14 +103,16 @@ export function composeIdioms(idioms: Idiom[]): ComposedIdiom {
     describe(profile: IdiomProfile): IdiomControlMap {
       const grid: GesturalEntry[] = [];
       const arc: GesturalEntry[] = [];
+      let page: IdiomControlMap['page'];
       for (const idiom of idioms) {
         const d = idiom.describe?.(profile);
         if (d) {
           grid.push(...d.grid);
           arc.push(...d.arc);
+          if (d.page && (!page || d.page.total > page.total)) page = d.page; // prefer the paging idiom
         }
       }
-      return { grid, arc };
+      return { grid, arc, page };
     },
 
     values(): Record<string, unknown> {

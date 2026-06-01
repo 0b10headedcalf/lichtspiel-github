@@ -486,7 +486,11 @@ function checkDescribe(): void {
   const paged = createArcMacros({ fold: 'page', encoders: [0, 1, 2, 3].map((i) => ({ name: `p${i}`, label: `axis ${i}` })) });
   paged.setProfile(arc2);
   const pmap = paged.describe(arc2);
-  ok(pmap.arc.some((e) => /page/.test(e.effect)), `describe: page fold names the page (${pmap.arc[0]?.effect})`);
+  ok(pmap.page?.total === 2 && pmap.page?.index === 0, `describe: page fold reports page 1/2 (${JSON.stringify(pmap.page)})`);
+  ok(map.page?.total === 1, 'describe: couple fold reports a single page (1/1)');
+  paged.onArcKey(ak(0, 1)); // hold enc0
+  paged.onArcKey(ak(1, 1)); // chord → flip to page 2
+  ok(paged.describe(arc2).page?.index === 1, 'describe: a chord advances the reported page index');
 }
 
 // ── run ───────────────────────────────────────────────────────────

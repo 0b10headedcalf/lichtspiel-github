@@ -30,6 +30,8 @@ import {
 export interface IdiomControlMap {
   grid: GesturalEntry[];
   arc: GesturalEntry[];
+  /** Which encoder page is active (paging fold) — `total` is 1 when not paging. */
+  page?: { index: number; total: number };
 }
 
 /**
