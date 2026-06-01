@@ -101,7 +101,7 @@ export const patternGridWorld: VisualTemplate = {
   gestural: {
     name: 'Neural Grid + Hypnotic Border',
     summary:
-      'A 3D cube grid — un-pressed cells flicker; pressing a cell cycles its brightness 0→15 (and picks its lit depth layer). Arc encoders set the alpha + brightness curves; enc 2 press toggles a pulsing border.',
+      'A 3D cube grid — un-pressed cells flicker; pressing a cell cycles its brightness 0→15 (and picks its lit depth layer). Arc encoders set the alpha + brightness curves; enc 2 press toggles a pulsing border. On an Arc 2 the presses fold: enc 0 cycles resting-colour → bg/border, enc 1 re-rolls the active colour.',
     grid: [
       { area: 'any cell', action: 'press', effect: 'cycle that cell\'s brightness 0→15 + stop its flicker' },
       { area: 'un-pressed cells', action: 'idle', effect: 'random brightness flicker (speed = flicker variant)' },

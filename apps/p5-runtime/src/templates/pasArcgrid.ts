@@ -75,7 +75,7 @@ export const pasArcgrid: VisualTemplate = {
   gestural: {
     name: 'Fader-Bank 3D Control',
     summary:
-      'Four control panels of four vertical faders — each drives one 3D object\'s X/Y/Z rotation frequency + Z-oscillation. Arc encoders scale each object; press regenerates it.',
+      'Four control panels of four vertical faders — each drives one 3D object\'s X/Y/Z rotation frequency + Z-oscillation. Arc encoders scale each object; press regenerates it. On an Arc 2 each encoder press cycles through two of the four objects.',
     grid: [
       { area: 'cols 0–2 of each 4-col panel', action: 'press a row', effect: 'set X / Y / Z rotation-frequency fader (higher row = faster)' },
       { area: 'col 3 of each panel', action: 'press a row', effect: 'set Z-oscillation amplitude fader' },
