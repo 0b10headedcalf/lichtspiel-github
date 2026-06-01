@@ -21,8 +21,10 @@
  *   • `fold: 'page'` — for sketches whose encoders are DISTINCT axes that shouldn't
  *     be paired (itoBox yaw/pitch/roll/zoom). The P physical encoders map to one
  *     PAGE of logical at a time; a CHORD (press one encoder while another is held)
- *     flips to the next page (and suppresses the two single presses). All logical
- *     reachable across pages; turn + press + ring follow the current page.
+ *     flips to the next page. Single presses fire ON PRESS (reliable even when the
+ *     Arc 2's best-effort push drops a release event) — so on a chord the first
+ *     press fires its action and the second is the flip. All logical reachable
+ *     across pages; turn + press + ring follow the current page.
  *
  * On an Arc 4 (P ≥ logical count) the mapping is 1:1 (original intact). Pure
  * control/LED — owns no grid, draws nothing.
@@ -153,7 +155,6 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
   });
   const heldPhysical: boolean[] = []; // per physical encoder (for the LED boost)
   const pressCursor: number[] = []; // per physical encoder (cycles its covered presses)
-  const chordConsumed: boolean[] = []; // per physical encoder (page-flip suppresses its single)
   let page = 0; // 'page' fold — the active page of logical encoders
 
   const fire = (i: number): void => {
@@ -197,6 +198,9 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
       // FOLDS — the delta drives every logical encoder this physical one covers, so
       // a 4-encoder sketch stays fully controllable on an Arc 2 (no object stranded).
       if (e.encoder < 0) return;
+      // Turning clears the held flag — self-heals a stale "held" left by a dropped
+      // release event, so a later lone press isn't misread as a page-flip chord.
+      heldPhysical[e.encoder] = false;
       for (const li of coveredLogical(e.encoder)) {
         const enc = encs[li];
         if (!enc) continue;
@@ -214,36 +218,28 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
     onArcKey(e: ArcKeyEvent): void {
       if (e.encoder < 0) return;
 
-      // ── release ──────────────────────────────────────────────────
+      // Release — just clear the held flag. Single presses fire on PRESS (below), so
+      // a flaky Arc 2 that drops a release never loses an action (the reliability fix).
       if (e.state !== 1) {
-        const wasHeld = heldPhysical[e.encoder] ?? false;
         heldPhysical[e.encoder] = false;
-        // 'page' fold fires a single press on RELEASE so a chord can pre-empt it.
-        if (fold === 'page' && wasHeld && pagesTotal() > 1) {
-          if (chordConsumed[e.encoder]) chordConsumed[e.encoder] = false;
-          else for (const li of coveredPressTargets(e.encoder)) fire(li);
-        }
         return;
       }
 
-      // ── press ────────────────────────────────────────────────────
-      // Suppress non-enc0 presses only when the device is KNOWN to lack per-encoder
-      // push. On a stale/empty profile (or Arc 2/4, which have push), trust it.
+      // Press. Suppress non-enc0 presses only when the device is KNOWN to lack
+      // per-encoder push. On a stale/empty profile (or Arc 2/4, which have it), trust it.
       if (profile.encoders > 0 && !profile.pushPerEncoder && e.encoder !== 0) return;
+      const otherHeld = heldPhysical.some((h, i) => h && i !== e.encoder);
       heldPhysical[e.encoder] = true;
 
       if (fold === 'page') {
-        if (pagesTotal() <= 1) {
-          for (const li of coveredPressTargets(e.encoder)) fire(li); // Arc 4: 1:1, fire now
+        // A CHORD (this press while another encoder is held) flips the page. The other
+        // encoder's single already fired on its own press; this press is the flip.
+        if (pagesTotal() > 1 && otherHeld) {
+          page = (page + 1) % pagesTotal();
           return;
         }
-        // A chord (this press while another encoder is held) flips the page.
-        const otherHeld = heldPhysical.some((h, i) => h && i !== e.encoder);
-        if (otherHeld) {
-          page = (page + 1) % pagesTotal();
-          for (let i = 0; i < heldPhysical.length; i++) if (heldPhysical[i]) chordConsumed[i] = true;
-        }
-        return; // a lone press resolves on release
+        for (const li of coveredPressTargets(e.encoder)) fire(li); // lone press → fire now
+        return;
       }
 
       // 'couple' fold — fire the covered press action(s).
@@ -383,7 +379,6 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
       }
       heldPhysical.length = 0;
       pressCursor.length = 0;
-      chordConsumed.length = 0;
       page = 0;
     },
   };

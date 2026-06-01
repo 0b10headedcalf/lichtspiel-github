@@ -57,8 +57,12 @@ grid and arc:
 - **`arcMacros` paging** (`fold:'page'`) — for encoders that are *distinct axes* that
   shouldn't be averaged (itoBox yaw/pitch/roll/zoom). The P physical encoders cover
   one PAGE of logical at a time; a **chord** (press one encoder while another is held)
-  flips to the next page (suppressing the two singles). All logical reachable across
-  pages; turn + press + ring follow the current page. Composes with velocity mode.
+  flips to the next page. Single presses fire **on press** (reliable even when the
+  Arc 2's best-effort push drops a release) — so on a chord the first press fires its
+  action and the second is the flip; a turn clears a stale held flag so a dropped
+  release can't cause a spurious flip. All logical reachable across pages; turn +
+  press + ring follow the current page. Composes with velocity mode. The panel shows
+  the active page ("ENCODER PAGE 1 / 2"), updated live on a flip.
 - **Pick coupling vs paging** by whether the logical encoders are *homogeneous*
   (sizes/spins/alphas → couple) or *distinct essential axes* (→ page). When the GRID
   is the primary control and the arc is secondary tweaks with good defaults, plain

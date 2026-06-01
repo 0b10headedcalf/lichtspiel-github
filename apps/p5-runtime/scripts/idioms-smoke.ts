@@ -424,23 +424,28 @@ function checkArcCoupling(): void {
       encoders: [0, 1, 2, 3].map((i) => ({ name: `q${i}`, mode: 'relative' as const, onPress: () => sink.push(i) })),
     });
     b.setProfile(arc2);
-    b.onArcKey(ak(0, 1)); // hold enc0
-    b.onArcKey(ak(1, 1)); // press enc1 while enc0 held → chord → flip page
+    b.onArcKey(ak(0, 1)); // lone press enc0 → fires its single ON PRESS (reliable, no release needed)
+    ok(sink.join(',') === '0', `page: a lone press fires its single on PRESS (got ${sink.join(',')})`);
+    b.onArcKey(ak(1, 1)); // press enc1 while enc0 held → chord → flip page (no 2nd single)
+    ok(sink.join(',') === '0', 'page: the chord flips without firing the second single');
     b.onArcKey(ak(1, 0));
     b.onArcKey(ak(0, 0)); // release both
-    ok(sink.length === 0, `page: a chord flips the page + suppresses both singles (fired ${sink.join(',')})`);
     b.onArcDelta(ad(0, 16));
     ok(b.values().q2 > 0 && b.values().q0 === 0, 'page: after the chord, enc0 drives logical 2');
 
-    const sink2: number[] = [];
-    const c = createArcMacros({
+    // Self-heal: a dropped release leaves a stale 'held'; a turn clears it so the
+    // next lone press fires (instead of being misread as a page-flip chord).
+    const sink3: number[] = [];
+    const d = createArcMacros({
       fold: 'page',
-      encoders: [0, 1, 2, 3].map((i) => ({ name: `r${i}`, onPress: () => sink2.push(i) })),
+      encoders: [0, 1, 2, 3].map((i) => ({ name: `d${i}`, mode: 'relative' as const, onPress: () => sink3.push(i) })),
     });
-    c.setProfile(arc2);
-    c.onArcKey(ak(0, 1));
-    c.onArcKey(ak(0, 0)); // lone press → fires its single on release
-    ok(sink2.join(',') === '0', `page: a lone press fires its single on release (got ${sink2.join(',')})`);
+    d.setProfile(arc2);
+    d.onArcKey(ak(0, 1)); // press enc0 (its release is "dropped" — held[0] stays set)
+    sink3.length = 0; // ignore that fire
+    d.onArcDelta(ad(0, 4)); // turning enc0 clears the stale held flag
+    d.onArcKey(ak(1, 1)); // lone enc1 press → must FIRE, not be misread as a chord
+    ok(sink3.includes(1), `page: a turn self-heals a stale held so the next press fires (got ${sink3.join(',')})`);
   }
 }
 
