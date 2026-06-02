@@ -28,6 +28,12 @@ import { GesturalPanel } from './ui/gesturalPanel.js';
 import { BridgeClient } from './transport/bridgeClient.js';
 import { randomizeParams, mutateParams } from './mutations/paramMutation.js';
 import { createVariantBrowser } from './mutations/variantBrowser.js';
+import {
+  type AbletonEvent,
+  type EventSource,
+  type RetrievalMode,
+  pickTemplate,
+} from './live/abletonRetrieval.js';
 import { createRng, randomSeed } from './seededRng.js';
 import type { VisualTemplate } from './visualTemplate.js';
 
@@ -96,6 +102,18 @@ const host = new SketchHost({
 
 let locked = false;
 
+// ── Ableton auto-retrieval state (Phase 5a) ──────────────────────────
+// Two on-screen toggles: retrieval mode (mapped ⇄ random, key `m`) and event
+// source (live OSC ⇄ simulated UI events, key `e`).
+let retrievalMode: RetrievalMode = 'mapped';
+let eventSource: EventSource = 'live';
+let lastAutoId: string | undefined; // last auto-loaded template id (random mode avoids repeats)
+// Synthetic events for the `simulated` source mirror the ADE_Sleuth test set.
+const SIM_SCENES = ['Scene1', 'Scene2'];
+const SIM_LOCATORS = ['Intro', 'buildup', 'Drop', 'next', 'hats back', 'END'];
+let simSceneN = 0;
+let simLocN = 0;
+
 // The gestural panel (control map + variant readout, toggled with `h`) and the
 // variant browser (new / canonical / step through each template's structural
 // space, live). The browser is the single template-mount authority: it re-mounts
@@ -146,7 +164,28 @@ bus.on('params.patch', (patch) => host.setTargetParams(patch));
 bus.on('live.state', (state) => {
   host.setLive(state);
   debug.setLive(state); // visible confirmation of the M4L → bridge → p5 path
-  // Phase 5 will route Live state through retrieval to pick a scene.
+});
+
+// Phase 5a — Ableton auto-retrieval. A Session scene launch or an Arrangement
+// locator crossing loads a fresh random *variant* of a picked template (idioms
+// stay live, so it's instantly monome-playable). Respects the on-screen lock —
+// an auto-swap never overrides a locked performer. In `live` source these arrive
+// from the M4L device via the bridge; in `simulated` source they're fired from
+// the keyboard (k/l) through this same path.
+function respond(evt: AbletonEvent): void {
+  if (locked) return;
+  const t = pickTemplate(evt, retrievalMode, registry, lastAutoId);
+  if (!t) return;
+  lastAutoId = t.id;
+  variants.newVariant(t); // mounts t (switching scene if needed) + re-rolls a variant
+  debug.setAbletonEvent(evt, t.name);
+}
+
+bus.on('scene.launched', (p) => {
+  if (eventSource === 'live') respond({ kind: 'scene', index: p.index, name: p.name });
+});
+bus.on('locator.crossed', (p) => {
+  if (eventSource === 'live') respond({ kind: 'locator', index: p.index, name: p.name });
 });
 
 bus.on('status', ({ connected }) => {
@@ -266,6 +305,32 @@ installKeyboard({
   toggleDebug: () => debug.toggle(),
   toggleEmulator: () => twin.toggle(),
   toggleGestural: () => panel.toggle(),
+  cycleRetrievalMode: () => {
+    retrievalMode = retrievalMode === 'mapped' ? 'random' : 'mapped';
+    debug.setRetrievalMode(retrievalMode);
+    console.info(`[lichtspiel] retrieval mode → ${retrievalMode}`);
+  },
+  cycleEventSource: () => {
+    eventSource = eventSource === 'live' ? 'simulated' : 'live';
+    debug.setEventSource(eventSource);
+    console.info(`[lichtspiel] event source → ${eventSource}`);
+  },
+  simulateSceneLaunch: () => {
+    if (eventSource !== 'simulated') {
+      console.info('[lichtspiel] switch event source to "simulated" (e) to fire synthetic events');
+      return;
+    }
+    const i = simSceneN++ % SIM_SCENES.length;
+    respond({ kind: 'scene', index: i, name: SIM_SCENES[i] as string });
+  },
+  simulateLocator: () => {
+    if (eventSource !== 'simulated') {
+      console.info('[lichtspiel] switch event source to "simulated" (e) to fire synthetic events');
+      return;
+    }
+    const i = simLocN++ % SIM_LOCATORS.length;
+    respond({ kind: 'locator', index: i, name: SIM_LOCATORS[i] as string });
+  },
 });
 
 // ── Optional bridge connection ───────────────────────────────────────

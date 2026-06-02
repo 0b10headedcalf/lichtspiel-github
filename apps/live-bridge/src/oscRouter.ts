@@ -3,9 +3,11 @@
  * using Node's built-in `dgram` + a tiny OSC codec (no native deps).
  *
  * Inbound (Max → bridge), prefix-scoped (default `/lichtspiel`):
- *   /lichtspiel/state  <jsonString>      → live.state  (the M4L device's LiveSessionState)
- *   /lichtspiel/scene  <id>              → scene.select
- *   /lichtspiel/param  <name> <float>    → params.update
+ *   /lichtspiel/state         <jsonString>   → live.state  (the M4L device's LiveSessionState)
+ *   /lichtspiel/scene         <id>           → scene.select
+ *   /lichtspiel/param         <name> <float> → params.update
+ *   /lichtspiel/scene/launch  <index> <name> → scene.launched  (Phase 5a auto-retrieval)
+ *   /lichtspiel/locator       <index> <name> → locator.crossed (Phase 5a auto-retrieval)
  * Decoded messages are validated downstream by the hub (a malformed state is
  * dropped, never forwarded to p5).
  *
@@ -87,6 +89,10 @@ export class OscRouter {
       if (name) {
         this.opts.onMessage(wire('params.update', { [name]: value } as Partial<VisualParamVector>));
       }
+    } else if (sub === '/scene/launch') {
+      this.opts.onMessage(wire('scene.launched', oscIndexName(args)));
+    } else if (sub === '/locator') {
+      this.opts.onMessage(wire('locator.crossed', oscIndexName(args)));
     } else {
       logger.info('OSC (unhandled)', { type: address });
     }
@@ -107,4 +113,16 @@ export class OscRouter {
     }
     this.sock = null;
   }
+}
+
+/**
+ * Parse `<index> <name…>` OSC args into `{ index, name }`. The name is rejoined
+ * from every trailing arg so a Max symbol with spaces (e.g. the "hats back"
+ * locator) survives whether the device sends it as one atom or several.
+ */
+function oscIndexName(args: Array<string | number>): { index: number; name: string } {
+  const raw = Number(args[0]);
+  const index = Number.isFinite(raw) ? Math.trunc(raw) : 0;
+  const name = args.slice(1).map(String).join(' ').trim();
+  return { index, name };
 }

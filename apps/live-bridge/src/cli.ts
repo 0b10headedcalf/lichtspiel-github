@@ -6,6 +6,8 @@
  *   pnpm send state --tempo 140 --clip "dense perc loop" --type midi --playing
  *   pnpm send params --density 0.9 --motion 0.7 --palette 0.1
  *   pnpm send retrieval parquetGlitch --reason "dense + fragmented" --density 0.9
+ *   pnpm send scene.launch 1 Scene2          # Phase 5a: a Session scene launch
+ *   pnpm send locator 4 "hats back"          # Phase 5a: an Arrangement locator crossing
  */
 
 import { WebSocket } from 'ws';
@@ -56,7 +58,7 @@ function buildState(): LiveSessionState {
 }
 
 function usage(): never {
-  console.error('usage: send <scene|state|params|retrieval> [...]');
+  console.error('usage: send <scene|state|params|retrieval|scene.launch|locator> [...]');
   process.exit(1);
 }
 
@@ -71,6 +73,16 @@ const msg = (() => {
       return wire('params.update', paramPatch());
     case 'state':
       return wire('live.state', buildState());
+    case 'scene.launch': {
+      const index = Number(rest[0] ?? 0);
+      const name = rest.slice(1).join(' ') || `Scene${index + 1}`;
+      return wire('scene.launched', { index, name });
+    }
+    case 'locator': {
+      const index = Number(rest[0] ?? 0);
+      const name = rest.slice(1).join(' ') || `locator ${index}`;
+      return wire('locator.crossed', { index, name });
+    }
     case 'retrieval': {
       const id = rest[0];
       if (!id) usage();

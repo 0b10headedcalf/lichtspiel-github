@@ -11,7 +11,9 @@ import type {
   DeviceDetached,
   GridKeyEvent,
   LiveSessionState,
+  LocatorCrossedPayload,
   MonomeSetup,
+  SceneLaunchedPayload,
   StatusPayload,
   VisualParamVector,
 } from '@lichtspiel/schemas';
@@ -23,6 +25,10 @@ export interface AppEvents {
   'params.patch': Partial<VisualParamVector>;
   /** New Live session state arrived. */
   'live.state': LiveSessionState;
+  /** An Ableton Session scene was launched (Phase 5a auto-retrieval trigger). */
+  'scene.launched': SceneLaunchedPayload;
+  /** The Arrangement playhead crossed a locator/cue point (Phase 5a trigger). */
+  'locator.crossed': LocatorCrossedPayload;
   /** A monome (or emulated) input event. */
   'monome.grid': GridKeyEvent;
   'monome.arcDelta': ArcDeltaEvent;

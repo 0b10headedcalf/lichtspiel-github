@@ -22,6 +22,22 @@ export interface SceneSelectPayload {
   sceneId: string;
 }
 
+/** A Session scene was launched in Live (M4L → bridge, Phase 5a). */
+export interface SceneLaunchedPayload {
+  /** 0-based Session scene index. */
+  index: number;
+  /** Scene name (may be empty if unnamed). */
+  name: string;
+}
+
+/** The Arrangement playhead crossed a locator / cue point (M4L → bridge, Phase 5a). */
+export interface LocatorCrossedPayload {
+  /** 0-based cue-point index, in song-time order. */
+  index: number;
+  /** Locator name (may be empty if unnamed). */
+  name: string;
+}
+
 export interface StatusPayload {
   bridge: boolean;
   p5Clients: number;
@@ -45,6 +61,8 @@ export interface LedFramePayload {
 export type WireMessage =
   | { v: 1; ts: number; type: 'hello'; payload: HelloPayload }
   | { v: 1; ts: number; type: 'scene.select'; payload: SceneSelectPayload }
+  | { v: 1; ts: number; type: 'scene.launched'; payload: SceneLaunchedPayload }
+  | { v: 1; ts: number; type: 'locator.crossed'; payload: LocatorCrossedPayload }
   | { v: 1; ts: number; type: 'params.update'; payload: Partial<VisualParamVector> }
   | { v: 1; ts: number; type: 'live.state'; payload: LiveSessionState }
   | { v: 1; ts: number; type: 'retrieval.result'; payload: VisualRetrievalResult }

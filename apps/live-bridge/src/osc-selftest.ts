@@ -110,6 +110,37 @@ async function main(): Promise<void> {
     failures++;
   }
 
+  // 4. /lichtspiel/scene/launch <i> <name> → scene.launched at p5
+  const wantLaunch = nextMessage(p5, 'scene.launched');
+  sendOsc(`${PREFIX}/scene/launch`, [1, 'Scene2']);
+  try {
+    const got = await wantLaunch;
+    const ok =
+      got.type === 'scene.launched' && got.payload.index === 1 && got.payload.name === 'Scene2';
+    console.log(ok ? '✓ OSC /scene/launch → p5 scene.launched' : '✗ /scene/launch payload wrong');
+    if (!ok) failures++;
+  } catch (err) {
+    console.error('✗ /scene/launch did not reach p5:', String(err));
+    failures++;
+  }
+
+  // 5. /lichtspiel/locator <i> <name> → locator.crossed at p5. Sent as split
+  //    atoms ['hats','back'] to prove the bridge rejoins a spaced name.
+  const wantLocator = nextMessage(p5, 'locator.crossed');
+  sendOsc(`${PREFIX}/locator`, [4, 'hats', 'back']);
+  try {
+    const got = await wantLocator;
+    const ok =
+      got.type === 'locator.crossed' && got.payload.index === 4 && got.payload.name === 'hats back';
+    console.log(
+      ok ? '✓ OSC /locator → p5 locator.crossed (space-safe name)' : '✗ /locator payload wrong',
+    );
+    if (!ok) failures++;
+  } catch (err) {
+    console.error('✗ /locator did not reach p5:', String(err));
+    failures++;
+  }
+
   udp.close();
   p5.close();
   osc.stop();

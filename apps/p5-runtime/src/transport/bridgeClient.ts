@@ -83,6 +83,10 @@ export class BridgeClient {
       this.bus.emit('params.patch', m.payload);
     } else if (isType(m, 'live.state')) {
       this.bus.emit('live.state', m.payload);
+    } else if (isType(m, 'scene.launched')) {
+      this.bus.emit('scene.launched', m.payload);
+    } else if (isType(m, 'locator.crossed')) {
+      this.bus.emit('locator.crossed', m.payload);
     } else if (isType(m, 'retrieval.result')) {
       // Apply the retrieved scene + its params.
       this.bus.emit('scene.select', { sceneId: m.payload.sceneId });

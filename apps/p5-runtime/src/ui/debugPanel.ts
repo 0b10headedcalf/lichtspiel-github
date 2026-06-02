@@ -6,6 +6,7 @@
 
 import type { LiveSessionState, VisualParamVector } from '@lichtspiel/schemas';
 import { KEYBOARD_HELP } from '../keyboard.js';
+import type { AbletonEvent, EventSource, RetrievalMode } from '../live/abletonRetrieval.js';
 
 const READOUT_KEYS: Array<keyof VisualParamVector> = [
   'density',
@@ -29,6 +30,9 @@ export class DebugPanel {
   private connected = false;
   private liveSummary = '';
   private liveRx = 0;
+  private retrievalMode: RetrievalMode = 'mapped';
+  private eventSource: EventSource = 'live';
+  private abletonSummary = '';
 
   constructor(root: HTMLElement, help: HTMLElement) {
     this.root = root;
@@ -52,6 +56,17 @@ export class DebugPanel {
     const label = sel.clipName || sel.trackName || sel.sceneName || '∅';
     this.liveRx++;
     this.liveSummary = `${s.transport.isPlaying ? '▶' : '⏸'} ${escape(label)} · ${s.transport.tempo.toFixed(0)}bpm · ${escape(sel.clipType)} · rx ${this.liveRx}`;
+  }
+  setRetrievalMode(m: RetrievalMode): void {
+    this.retrievalMode = m;
+  }
+  setEventSource(s: EventSource): void {
+    this.eventSource = s;
+  }
+  /** Show the last Ableton-triggered auto-retrieval: event → chosen visual. */
+  setAbletonEvent(evt: AbletonEvent, visualName: string): void {
+    const named = evt.name ? ` "${escape(evt.name)}"` : '';
+    this.abletonSummary = `${evt.kind} ${evt.index}${named} → ${escape(visualName)}`;
   }
 
   toggle(): void {
@@ -77,6 +92,10 @@ export class DebugPanel {
     if (this.liveSummary) {
       lines.push(`<div class="hud-row hud-meta">Live: ${this.liveSummary}</div>`);
     }
+    lines.push(
+      `<div class="hud-row hud-meta">Ableton: ${this.retrievalMode} · ${this.eventSource}` +
+        `${this.abletonSummary ? ` · ${this.abletonSummary}` : ''}</div>`,
+    );
     for (const k of READOUT_KEYS) {
       const v = params[k] as number;
       lines.push(

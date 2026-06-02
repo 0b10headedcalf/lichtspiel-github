@@ -145,7 +145,13 @@ export class BridgeServer {
       return;
     }
 
-    if (isType(m, 'scene.select') || isType(m, 'params.update') || isType(m, 'retrieval.result')) {
+    if (
+      isType(m, 'scene.select') ||
+      isType(m, 'params.update') ||
+      isType(m, 'retrieval.result') ||
+      isType(m, 'scene.launched') ||
+      isType(m, 'locator.crossed')
+    ) {
       logger.info(m.type, { source: src, type: m.type, summary: summarize(m) });
       this.broadcast(['p5'], m);
       return;
@@ -219,5 +225,7 @@ function summarize(m: WireMessage): string {
   if (isType(m, 'scene.select')) return m.payload.sceneId;
   if (isType(m, 'retrieval.result')) return `${m.payload.sceneId} (conf ${m.payload.confidence})`;
   if (isType(m, 'params.update')) return Object.keys(m.payload).join(',');
+  if (isType(m, 'scene.launched')) return `scene ${m.payload.index} "${m.payload.name}"`;
+  if (isType(m, 'locator.crossed')) return `locator ${m.payload.index} "${m.payload.name}"`;
   return m.type;
 }
