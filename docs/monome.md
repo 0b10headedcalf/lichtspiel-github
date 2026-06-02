@@ -104,6 +104,13 @@ axis: motion  density  turbulence symmetry  cameraDepth  contrast  palette  stro
   enc0 press = surprise, enc1 press = next scene.
 - **Arc 4:** adds enc2 = motion, enc3 = palette.
 
+> This global mapping is the fallback for the 5 legacy visual-only templates. The
+> windchime / idiom corpus instead OWNS the grid + arc through the idiom layer
+> (`faderBank` / `arcMacros`). There, a 64/2-native sketch's Grid 128 cols 8–15 + Arc 4
+> enc 2–3 become **extended controls of that sketch** (more faders / knobs), *not*
+> scene-select — see `docs/idioms.md` ("adapt up"). Scene nav for idiom sketches is
+> keyboard / Ableton.
+
 A keyboard fallback mirrors all of this (see `docs/setup.md`).
 
 ## Detection & adaptation

@@ -75,7 +75,16 @@ export interface ArcEncoderSpec {
 }
 
 export interface ArcMacrosOptions {
+  /** The sketch's NATIVE logical encoders — always reachable; fold onto fewer physical. */
   encoders: ArcEncoderSpec[];
+  /**
+   * BONUS encoders that appear ONLY on an arc with MORE physical encoders than the
+   * native count (a 2-encoder sketch's enc 2–3 on an Arc 4). They bind to the
+   * physical encoders past the native block, and are DORMANT (each holds its
+   * `initial`, so pick a neutral default) otherwise — never coupled into the native
+   * pair. The "adapt up" mirror of the turn-fold.
+   */
+  extendedEncoders?: ArcEncoderSpec[];
   /**
    * How logical encoders fold onto fewer physical ones (see the module doc).
    * 'couple' (default): physical `p` drives logical {p, p+P, …} together on turn.
@@ -143,7 +152,11 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
   let profile: IdiomProfile = EMPTY_PROFILE;
   const fold = opts.fold ?? 'couple';
   const coupledPress = opts.coupledPress ?? 'cycle';
-  const encs: EncState[] = opts.encoders.map((spec) => {
+  // encs = native ++ extended; extended bind only to physical encoders beyond the
+  // native block (and only on an arc that HAS them) — see coveredLogical.
+  const srcEncoders: ArcEncoderSpec[] = [...opts.encoders, ...(opts.extendedEncoders ?? [])];
+  const nativeCount = opts.encoders.length;
+  const encs: EncState[] = srcEncoders.map((spec) => {
     const mode = spec.mode ?? 'absolute';
     return {
       spec,
@@ -161,25 +174,32 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
     encs[i]?.spec.onPress?.();
   };
 
-  /** Physical encoder count: the device's, or the spec count when unknown (1:1). */
-  const physicalCount = (): number => (profile.encoders > 0 ? profile.encoders : encs.length);
+  /** Physical encoder count: the device's, or the native spec count when unknown. */
+  const physicalCount = (): number => (profile.encoders > 0 ? profile.encoders : nativeCount);
 
-  /** Number of pages (only > 1 in 'page' fold on a device with fewer encoders). */
-  const pagesTotal = (): number => Math.max(1, Math.ceil(encs.length / physicalCount()));
+  /** Pages of NATIVE encoders (only > 1 in 'page' fold on a device with fewer encoders). */
+  const pagesTotal = (): number => {
+    const P = physicalCount();
+    return P < nativeCount ? Math.max(1, Math.ceil(nativeCount / P)) : 1;
+  };
 
   /**
-   * The logical encoders physical `p` currently drives (turn). 'couple' → the whole
-   * column {p, p+P, …}; 'page' → just this page's single logical. Empty if out of range.
+   * The logical encoders physical `p` currently drives (turn). When the arc has at
+   * least as many encoders as the sketch is NATIVE to, it's 1:1 (native then extended,
+   * laid in order). With FEWER, only the NATIVE encoders fold ('couple' → the column
+   * {p, p+P, …}; 'page' → this page's single logical) and the EXTENDED ones stay
+   * dormant. Empty if out of range.
    */
   const coveredLogical = (p: number): number[] => {
     const P = physicalCount();
-    if (p < 0 || p >= P) return p >= 0 && p < encs.length ? [p] : []; // stale profile → 1:1
+    if (p < 0 || p >= P) return p >= 0 && p < encs.length ? [p] : []; // trust an out-of-range event
+    if (P >= nativeCount) return p < encs.length ? [p] : []; // 1:1 — native then extended
     if (fold === 'page') {
       const l = (page % pagesTotal()) * P + p;
-      return l < encs.length ? [l] : [];
+      return l < nativeCount ? [l] : [];
     }
     const out: number[] = [];
-    for (let l = p; l < encs.length; l += P) out.push(l);
+    for (let l = p; l < nativeCount; l += P) out.push(l);
     return out;
   };
 
@@ -309,10 +329,12 @@ export function createArcMacros(opts: ArcMacrosOptions): ArcMacros {
         const covered = coveredLogical(ph);
         if (covered.length === 0) continue;
         const coupled = covered.length > 1;
+        const extended = covered.every((l) => l >= nativeCount);
         arc.push({
           area: `enc ${ph}`,
           action: 'turn',
-          effect: covered.map(turnLabel).join(' + ') + (coupled ? ' · coupled' : ''),
+          effect:
+            covered.map(turnLabel).join(' + ') + (coupled ? ' · coupled' : '') + (extended ? ' · extended' : ''),
         });
         const pressTargets = covered.filter((l) => encs[l]?.spec.onPress);
         if (pressTargets.length) {

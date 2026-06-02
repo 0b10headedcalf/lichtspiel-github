@@ -19,10 +19,11 @@
  *   GRID col0 speed · col1 radius · col2 undulation · col3 lobes ·
  *        col4 inner-morph density · col5 rect-form density ·
  *        col6 palette select (press also bursts) · col7 grain/damage
- *        (bottom press cycles grain type).  On a Grid 128, cols 8–15 → scene-select.
+ *        (bottom press cycles grain type).  On a Grid 128, cols 8–15 = 8 EXTENDED faders
+ *        (contrast · sway · strands · morph · vignette · bursts · flicker · glow).
  *   ARC  enc0 turn twist / press toggle 3D bulge field ·
  *        enc1 turn aperture / press advance palette + 2D burst.
- *        On an Arc 4, enc2 adds slow orbit, enc3 modulates grain density.
+ *        On an Arc 4, enc2 = slow orbit (press recenters), enc3 = grain density (press cycles type).
  */
 
 import type p5 from 'p5';
@@ -73,6 +74,7 @@ interface Bulge {
   dWidth: number;
   phase: number;
   pulse: number;
+  breath: number;
   drift: number;
 }
 /** A 2D rect burst (spawned by the palette press + arc enc1 press). */
@@ -115,19 +117,20 @@ export const lichtspielOpus: VisualTemplate = {
   gestural: {
     name: 'Ruttmann Film Faders + Arc',
     summary:
-      'Eight grid column-faders sculpt the 3D morphing tunnel; the arc twists the camera + drives the aperture. The palette column and the arc presses burst + advance. Native Grid 64 / Arc 2.',
+      'Eight grid column-faders sculpt the 3D morphing tunnel; the arc twists the camera + drives the aperture. The palette column and the arc presses burst + advance. Native Grid 64 / Arc 2 — a Grid 128 / Arc 4 lights up 8 more faders + 2 more knobs of the SAME sketch.',
     grid: [
       { area: 'cols 0–5', action: 'press a row', effect: 'fader: speed · radius · undulation · lobes · inner-morph density · rect-form density' },
       { area: 'col 6', action: 'press a row', effect: 'select palette (one row each) + spawn a 2D rect burst' },
       { area: 'col 7', action: 'press a row', effect: 'grain / vignette damage; bottom row cycles the grain type' },
-      { area: 'cols 8–15 (Grid 128)', action: 'press', effect: 'select scene' },
+      { area: 'cols 8–15 (Grid 128)', action: 'press a row', effect: 'extended faders: contrast · camera sway · strands · morph size · vignette · ambient bursts · flicker · ring glow' },
     ],
     arc: [
       { area: 'enc 0', action: 'turn', effect: 'global tunnel twist / camera orbit' },
       { area: 'enc 0', action: 'press', effect: 'toggle the continuous 3D bulge field (1–4 bulges)' },
       { area: 'enc 1', action: 'turn', effect: 'aperture / iris pressure' },
       { area: 'enc 1', action: 'press', effect: 'advance palette + spawn a geometric burst' },
-      { area: 'enc 2–3 (Arc 4)', action: 'turn', effect: 'extra orbit + grain modulation' },
+      { area: 'enc 2 (Arc 4)', action: 'turn / press', effect: 'slow camera orbit / recenter the orbit' },
+      { area: 'enc 3 (Arc 4)', action: 'turn / press', effect: 'grain density / cycle grain type' },
     ],
   },
   variants,
@@ -140,8 +143,11 @@ export const lichtspielOpus: VisualTemplate = {
     let profile: IdiomProfile = profileFromSetup(ctx.setup);
 
     // ── idioms (the control map) ───────────────────────────────────
-    // 8 grid faders, one column each (spread:false) so a Grid 128 keeps cols
-    // 8–15 free for scene-select; 2 arc encoders (+2 dormant on an Arc 2).
+    // NATIVE to Grid 64 / Arc 2: 8 grid faders (one column each, spread:false) + 2 arc
+    // encoders. On a BIGGER device the idiom layer auto-extends — the 8 EXTENDED faders
+    // light up on a Grid 128's cols 8–15 and the 2 EXTENDED encoders on an Arc 4's enc
+    // 2–3 — all MORE manipulation of this sketch, never scene-switching. All extended
+    // controls default to a NEUTRAL value, so a Grid 64 / Arc 2 stays exactly as authored.
     const fb: FaderBank = createFaderBank({
       spread: false,
       lanes: [
@@ -154,13 +160,27 @@ export const lichtspielOpus: VisualTemplate = {
         { name: 'palette', label: 'palette select', mode: 'select', initial: 1 - startPalette / 7 },
         { name: 'damage', label: 'grain / vignette damage', initial: 3 / 7 },
       ],
+      // Grid 128 cols 8–15 — bonus expression; every initial = the Grid 64 base look.
+      extendedLanes: [
+        { name: 'contrast', label: 'tube line contrast', initial: 0.5 },
+        { name: 'sway', label: 'handheld camera sway', initial: 0.5 },
+        { name: 'strands', label: 'longitudinal strand density', initial: 0.5 },
+        { name: 'morph', label: 'interior-morph size', initial: 0.5 },
+        { name: 'vignette', label: 'film-gate vignette depth', initial: 0.5 },
+        { name: 'bursts', label: 'ambient Ruttmann burst rate', initial: 0 },
+        { name: 'flicker', label: 'film-flash flicker', initial: 0.5 },
+        { name: 'glow', label: 'accent-ring glow', initial: 0.5 },
+      ],
     });
     const arc: ArcMacros = createArcMacros({
       encoders: [
         { name: 'twist', label: 'tunnel twist / camera orbit', pressLabel: 'toggle the 3D bulge field', initial: 24 / 63, led: 'comet', onPress: () => toggleBulges() },
         { name: 'aperture', label: 'aperture / iris', pressLabel: 'advance palette + burst', initial: 32 / 63, led: 'comet', onPress: () => advancePalette() },
-        { name: 'orbit', label: 'slow orbit', mode: 'relative', initial: 0, led: 'playhead' },
-        { name: 'grainMod', label: 'grain density', initial: 0.5, led: 'gauge' },
+      ],
+      // Arc 4 enc 2–3 — dormant on an Arc 2 (NOT coupled into twist/aperture).
+      extendedEncoders: [
+        { name: 'orbit', label: 'slow camera orbit', pressLabel: 'recenter the orbit', mode: 'relative', initial: 0, led: 'playhead', onPress: () => recenterOrbit() },
+        { name: 'grainMod', label: 'grain density', pressLabel: 'cycle grain type', initial: 0.5, led: 'gauge', onPress: () => cycleGrain() },
       ],
     });
     const idioms: ComposedIdiom = composeIdioms([fb, arc]);
@@ -175,6 +195,7 @@ export const lichtspielOpus: VisualTemplate = {
     let timePhase = 0;
     let tunnelTravel = 0; // 0..1 sub-ring scroll offset
     let elapsed = 0; // seconds since mount (burst clock)
+    let burstClock = 0; // ambient-burst timer (extended 'bursts' fader)
     let W = ctx.width;
     let H = ctx.height;
     let cur: VisualParamVector = ctx.initialParams;
@@ -191,24 +212,37 @@ export const lichtspielOpus: VisualTemplate = {
     let arcAperture = 0.5;
     let orbit = 0;
     let grainMod = 0.5;
+    // extended-fader values (Grid 128 cols 8–15) — neutral on a Grid 64, so no effect there.
+    let exContrast = 0.5;
+    let exSway = 0.5;
+    let exStrands = 0.5;
+    let exMorph = 0.5;
+    let exVignette = 0.5;
+    let exBursts = 0;
+    let exFlicker = 0.5;
+    let exGlow = 0.5;
 
+    // orig 52/72. p5 WEBGL strokes cost per CPU-built line-segment, so this is the
+    // density/60fps balance (every ring is a stroked loop, no stroked fill shells):
+    // 44 rings still reads deep, 46 segments ≈ 8 per lobe (smooth).
     const RINGS = tunnelStyle === 'sparse' ? 30 : 44;
-    const SEGMENTS = tunnelStyle === 'wire' ? 36 : 48;
+    const SEGMENTS = tunnelStyle === 'wire' ? 34 : 46;
 
     function toggleBulges(): void {
       bulgeActive = !bulgeActive;
       bulges.length = 0;
       if (bulgeActive) {
-        const n = 1 + ctx.rng.int(4);
+        const n = 1 + ctx.rng.int(4); // 1..4 bulges (orig random(1,5))
         for (let i = 0; i < n; i++) {
           bulges.push({
             angle: (i / Math.max(1, n)) * TWO_PI + ctx.rng.range(-0.5, 0.5),
             depth: ctx.rng.range(0.1, 0.9),
-            amp: ctx.rng.range(0.3, 0.8),
+            amp: ctx.rng.range(0.39, 1.0), // × tubeRadius (orig 120..310 px / radius ≈ 0.39..1.0)
             aWidth: ctx.rng.range(0.36, 0.95),
-            dWidth: ctx.rng.range(0.12, 0.42),
+            dWidth: ctx.rng.range(0.06, 0.16), // orig zWidth 240..620 / tunnelDepth ≈ 0.06..0.16
             phase: ctx.rng.range(0, TWO_PI),
             pulse: ctx.rng.range(0.55, 1.85),
+            breath: ctx.rng.range(0.18, 0.72),
             drift: ctx.rng.range(-0.1, 0.1),
           });
         }
@@ -235,6 +269,14 @@ export const lichtspielOpus: VisualTemplate = {
       fb.set('palette', 1 - paletteIndex / 7); // keep the fader LED in sync
       spawnBurst();
     }
+    // extended arc enc 2–3 press actions (Arc 4 only)
+    function recenterOrbit(): void {
+      orbit = 0;
+      arc.set('orbit', 0); // reset the relative-phase encoder so the spin stops
+    }
+    function cycleGrain(): void {
+      grainType = (grainType + 1) % 4;
+    }
 
     function readControls(): void {
       const v = fb.values();
@@ -254,21 +296,33 @@ export const lichtspielOpus: VisualTemplate = {
       arcAperture = lerp(0.05, 1, a.aperture ?? 0.5);
       orbit = a.orbit ?? 0;
       grainMod = a.grainMod ?? 0.5;
+      // extended faders (Grid 128 cols 8–15) — each defaults neutral so a Grid 64 is unchanged.
+      exContrast = v.contrast ?? 0.5;
+      exSway = v.sway ?? 0.5;
+      exStrands = v.strands ?? 0.5;
+      exMorph = v.morph ?? 0.5;
+      exVignette = v.vignette ?? 0.5;
+      exBursts = v.bursts ?? 0;
+      exFlicker = v.flicker ?? 0.5;
+      exGlow = v.glow ?? 0.5;
     }
 
     const pal = (i: number): number[] => PALETTES[paletteIndex]?.[i] ?? [0, 0, 0];
 
-    // ── 3D tunnel geometry (canvas-relative units, true depth) ──────
-    // tube radius + ring spacing scale to the canvas; rings recede in +z (toward the
-    // camera) and scroll forward via tunnelTravel, recycling for an infinite tunnel.
-    let MIN = Math.min(ctx.width, ctx.height);
-    const ringSpacing = (): number => MIN * 0.085;
-    const tubeRadius = (): number => lerp(0.1, 0.26, radiusN) * MIN;
-    const undulationAmp = (): number => undulationN * tubeRadius() * 0.62;
-    // The whole tube sits BEHIND the origin (negative z), receding away from the
-    // default camera so we look into the mouth (like the original's far camera) —
-    // not so close that the camera is inside the near rings.
-    const NEAR_Z = (): number => -MIN * 0.12;
+    // ── 3D tunnel geometry (HEIGHT-relative units, true depth) ──────
+    // Everything scales to canvas HEIGHT. The WEBGL camera's FOV is vertical (fovy 60°,
+    // eye at 0.866·H), so height-scaling reproduces the original's vertical framing at
+    // ANY aspect (the original is 2056×1260; the runtime window may be portrait). The
+    // ratios match Lichtspiel_v3.pde's pixel constants taken over its 1260 frame height.
+    // (H + W are declared above and refreshed each frame in draw().)
+    const ringSpacing = (): number => H * 0.0595; // 75 / 1260
+    const tubeRadius = (): number => lerp(0.127, 0.333, radiusN) * H; // 160..420 / 1260
+    const undulationAmp = (): number => undulationN * tubeRadius() * 0.62; // ≈ 10..190 / 1260
+    // The tube's NEAR end sits in FRONT of the origin toward the camera (+z), exactly as
+    // the original (near ring at world +0.286·H, ~0.58·H clear of the camera) — big and
+    // immersive, yet never close enough for the camera to enter the near rings. It
+    // recedes into −z. (520−160)/1260 ≈ 0.286.
+    const NEAR_Z = (): number => H * 0.286;
     /** z of ring i (0 near .. RINGS-1 far); the sub-ring travel drifts it toward the camera. */
     function ringZ(i: number): number {
       return NEAR_Z() - (i - (tunnelTravel % 1)) * ringSpacing();
@@ -284,16 +338,22 @@ export const lichtspielOpus: VisualTemplate = {
       let r = base + amp * 0.55 * w1 + amp * 0.32 * w2 + amp * 0.46 * (w3 - 0.5);
       if (bulgeActive) {
         for (const b of bulges) {
-          const da = angularDist(a, b.angle + timePhase * b.drift);
-          const dd = Math.abs(d - b.depth);
+          // the bulge swims through depth + angle and breathes, like the original's zAt/angleAt.
+          const cd = clamp01(b.depth + 0.22 * Math.sin(timePhase * 0.28 + b.phase));
+          const ca = b.angle + 0.55 * Math.sin(timePhase * 0.42 + b.phase) + timePhase * b.drift;
+          const da = angularDist(a, ca);
+          const dd = Math.abs(d - cd);
           const env = Math.exp(-(da * da) / (b.aWidth * b.aWidth)) * Math.exp(-(dd * dd) / (b.dWidth * b.dWidth));
           const pulse = 0.45 + 0.55 * Math.sin(timePhase * b.pulse + b.phase);
-          r += base * b.amp * env * pulse;
+          const breathing = 0.72 + 0.28 * Math.sin(timePhase * b.breath + b.phase * 1.7);
+          r += base * b.amp * env * pulse * breathing;
         }
       }
       r = Math.max(base * 0.18, r);
       const z = ringZ(i);
-      const twist = arcTwist + z * 0.0008 + orbit * TWO_PI + 0.2 * Math.sin(timePhase * 0.2);
+      // Helical twist grows with depth — the original's z*0.0011 over its z-range is
+      // ~4.2 rad across the tube; expressed over normalized depth d it's resolution-free.
+      const twist = arcTwist + (0.55 - 4.2 * d) + orbit * TWO_PI + 0.2 * Math.sin(timePhase * 0.2);
       out[0] = r * Math.cos(a + twist);
       out[1] = r * Math.sin(a + twist);
       out[2] = z;
@@ -304,6 +364,8 @@ export const lichtspielOpus: VisualTemplate = {
     const va: [number, number, number] = [0, 0, 0];
     const vb: [number, number, number] = [0, 0, 0];
     const dN = (i: number): number => i / (RINGS - 1); // ring index → normalized depth (0 near .. 1 far)
+    // Reused per-frame tube point grid: tubeGrid[(i*(SEGMENTS+1)+j)*3 + {0,1,2}] = x,y,z.
+    const tubeGrid = new Float64Array(RINGS * (SEGMENTS + 1) * 3);
 
     return {
       setup(p): void {
@@ -323,12 +385,15 @@ export const lichtspielOpus: VisualTemplate = {
         idioms.setProfile(profile);
       },
 
+      // Live, hardware-accurate control map for the gestural panel — shows the ACTUAL
+      // per-column / per-encoder mapping for the connected device (native cols 0–7 +
+      // the extended cols 8–15 on a Grid 128; the extended enc 2–3 on an Arc 4).
+      controlMap: (setup) => idioms.describe(profileFromSetup(setup)),
+
       onGridKey(e): void {
-        // Grid 128 extra columns → scene-select; the idioms own cols 0–7.
-        if (e.x >= 8) {
-          if (e.state === 1) ctx.controls.selectSceneIndex(e.x - 8);
-          return;
-        }
+        // The idioms own the WHOLE grid: cols 0–7 = the 8 native faders, cols 8–15 (Grid
+        // 128) = the 8 extended faders. No scene-select here — the extra real estate is
+        // MORE manipulation of this sketch (scene nav lives on the keyboard / Ableton).
         idioms.onGridKey?.(e);
         if (e.state === 1) {
           if (e.x === 6) spawnBurst(); // palette press also bursts (v3)
@@ -345,11 +410,19 @@ export const lichtspielOpus: VisualTemplate = {
       draw({ p, width, height, dt }): void {
         W = width;
         H = height;
-        MIN = Math.min(width, height);
         elapsed += dt;
         readControls();
         timePhase += dt * filmSpeed;
-        tunnelTravel = (tunnelTravel + dt * filmSpeed * 0.9) % RINGS;
+        // ~9.6 rings/s per filmSpeed unit — the original's 12 px/frame ÷ 75 px ring × 60fps.
+        tunnelTravel = (tunnelTravel + dt * filmSpeed * 9.6) % RINGS;
+        // extended fader 'bursts': ambient Ruttmann bursts (silent at 0; faster as it rises).
+        if (exBursts > 0.02) {
+          burstClock += dt;
+          if (burstClock >= lerp(6, 0.4, exBursts)) {
+            spawnBurst();
+            burstClock = 0;
+          }
+        }
 
         const gl = p.drawingContext as WebGLRenderingContext;
         const bg = pal(0);
@@ -365,11 +438,12 @@ export const lichtspielOpus: VisualTemplate = {
         // ── 3D tunnel + interior morphs + volumetric grain (depth on) ──
         gl.enable(gl.DEPTH_TEST);
         gl.clear(gl.DEPTH_BUFFER_BIT);
+        const swayAmt = exSway * 2; // extended fader 'sway': handheld camera wobble (1 at neutral)
         p.push();
         p.translate(0, height * 0.02, 0);
-        p.rotateX(0.08 * Math.sin(timePhase * 0.7));
-        p.rotateY(arcTwist * 0.12 + 0.12 * Math.sin(timePhase * 0.31));
-        p.rotateZ(0.04 * Math.sin(timePhase * 0.17));
+        p.rotateX(0.08 * swayAmt * Math.sin(timePhase * 0.7));
+        p.rotateY(arcTwist * 0.9 + 0.12 * swayAmt * Math.sin(timePhase * 0.31));
+        p.rotateZ(0.04 * swayAmt * Math.sin(timePhase * 0.17));
         drawTunnel3D(p);
         drawInteriorMorphs3D(p);
         drawVolumetricGrain3D(p);
@@ -401,20 +475,28 @@ export const lichtspielOpus: VisualTemplate = {
 
     // ── 2D layers (screen space) ──────────────────────────────────
     function drawBackplate(p: p5, w: number, h: number): void {
+      const t = timePhase;
       p.noStroke();
       const ink = pal(1);
-      for (let i = 0; i < 16; i++) {
-        const a = lerp(30, 0, i / 15);
+      const sh = pal(3);
+      const paper = pal(4);
+      // inset vignette frames (orig 18 frames, alpha 34→0)
+      for (let i = 0; i < 18; i++) {
+        const a = lerp(34, 0, i / 17);
         p.fill(ink[0] ?? 0, ink[1] ?? 0, ink[2] ?? 0, a);
-        const pad = i * (w * 0.018);
+        const pad = i * (w * 0.0175);
         p.rect(pad, pad, w - pad * 2, h - pad * 2);
       }
-      // aperture-driven side masks (arc enc1)
-      const sh = pal(3);
-      const apW = w * (1 - arcAperture) * 0.4;
-      p.fill(sh[0] ?? 0, sh[1] ?? 0, sh[2] ?? 0, 150);
-      p.rect(0, 0, apW, h);
-      p.rect(w - apW, 0, apW, h);
+      // two slow vertical Ruttmann bars sliding at the edges
+      p.fill(sh[0] ?? 0, sh[1] ?? 0, sh[2] ?? 0, 110 + 45 * Math.sin(t * 0.9));
+      p.rect(-40, 0, w * (0.08 + 0.08 * Math.sin(t * 0.21)), h);
+      p.fill(sh[0] ?? 0, sh[1] ?? 0, sh[2] ?? 0, 80);
+      p.rect(w * (0.82 + 0.06 * Math.sin(t * 0.16)), 0, w * 0.25, h);
+      // two large rectilinear panels (paper + ink)
+      p.fill(paper[0] ?? 0, paper[1] ?? 0, paper[2] ?? 0, 28);
+      p.rect(w * 0.16, h * 0.12, w * 0.38, h * 0.76);
+      p.fill(ink[0] ?? 0, ink[1] ?? 0, ink[2] ?? 0, 22);
+      p.rect(w * 0.48, h * 0.05, w * 0.24, h * 0.88);
     }
 
     function drawRectForms(p: p5, w: number, h: number): void {
@@ -438,6 +520,20 @@ export const lichtspielOpus: VisualTemplate = {
         p.rect(0, 0, rw, rh);
         p.pop();
       }
+      // iris aperture masks (arc enc1) — two big shadow blocks irising toward centre;
+      // the open gap in the middle = w·arcAperture (orig geometry).
+      const sh = pal(3);
+      const apertureW = w * arcAperture;
+      p.fill(sh[0] ?? 0, sh[1] ?? 0, sh[2] ?? 0, 120);
+      p.rect(w * 0.5 - apertureW * 0.5 - w * 0.25, h * 0.5, w * 0.5, h * 1.4);
+      p.rect(w * 0.5 + apertureW * 0.5 + w * 0.25, h * 0.5, w * 0.5, h * 1.4);
+      // slow rotating diagonal sweep bar
+      p.push();
+      p.translate(w * 0.5, h * 0.5);
+      p.rotate(-0.38 + 0.12 * Math.sin(t * 0.13));
+      p.fill(sh[0] ?? 0, sh[1] ?? 0, sh[2] ?? 0, 55);
+      p.rect(0, 0, w * 1.6, h * 0.18);
+      p.pop();
       p.rectMode(p.CORNER);
     }
 
@@ -474,18 +570,22 @@ export const lichtspielOpus: VisualTemplate = {
     function drawFilmGate(p: p5, w: number, h: number): void {
       const sh = pal(3);
       const paper = pal(4);
+      const vigScale = exVignette * 2; // 'vignette' extended fader (1 at neutral)
       p.noStroke();
-      for (let i = 0; i < 28; i++) {
-        const pad = i * (w * 0.012);
-        const a = lerp(0, 11 + damage * 22, i / 27);
+      for (let i = 0; i < 36; i++) {
+        const pad = i * (w * 0.0088);
+        const a = lerp(0, (11 + damage * 22) * vigScale, i / 35);
         p.fill(sh[0] ?? 0, sh[1] ?? 0, sh[2] ?? 0, a);
         p.rect(pad, pad, w - pad * 2, h - pad * 2);
       }
-      // film-gate border + sprocket holes
+      // film-gate double border + sprocket holes
       p.noFill();
       p.stroke(sh[0] ?? 0, sh[1] ?? 0, sh[2] ?? 0, 135);
       p.strokeWeight(Math.max(8, w * 0.009));
       p.rect(10, 10, w - 20, h - 20);
+      p.stroke(paper[0] ?? 0, paper[1] ?? 0, paper[2] ?? 0, 38);
+      p.strokeWeight(2);
+      p.rect(26, 26, w - 52, h - 52);
       p.noStroke();
       p.fill(paper[0] ?? 0, paper[1] ?? 0, paper[2] ?? 0, 105);
       const holes = 10;
@@ -495,24 +595,41 @@ export const lichtspielOpus: VisualTemplate = {
         p.rect(w - 28, y - 11, 14, 22, 3);
       }
       drawGrain(p, w, h);
+      // overall film-flash flicker (orig final pal(4) wash)
+      p.noStroke();
+      p.fill(paper[0] ?? 0, paper[1] ?? 0, paper[2] ?? 0, (8 + 12 * damage * p.noise(timePhase * 2)) * (exFlicker * 2)); // 'flicker' fader
+      p.rect(0, 0, w, h);
     }
 
     function drawGrain(p: p5, w: number, h: number): void {
       // Per-frame, deterministic: seeded by (mount seed, frame parity, grain type).
       const g = createRng((ctx.seed + Math.floor(elapsed * 600) * 7919 + grainType * 2003) | 0);
-      const dens = damage * (0.4 + grainMod); // arc enc3 modulates density
+      const dens = clamp01(damage * (0.4 + grainMod)); // arc enc3 modulates density
       const paper = pal(4);
       const ink = pal(3);
       p.strokeWeight(1);
+      // Batched random speckle: ONE GL_POINTS draw call per (colour, alpha) bucket.
+      // p5's WEBGL point() builds a fresh geometry per call (hundreds/frame = death);
+      // a single POINTS shape is ~100× cheaper and reads identically as film grain.
+      const dust = (count: number, c: number[], alpha: number): void => {
+        if (count <= 0) return;
+        p.stroke(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, alpha);
+        p.beginShape(p.POINTS);
+        for (let i = 0; i < count; i++) p.vertex(g.range(w), g.range(h));
+        p.endShape();
+      };
       if (grainType === 0) {
-        const n = Math.round(lerp(60, 520, dens));
-        for (let i = 0; i < n; i++) {
-          const c = g.random() < 0.7 ? paper : ink;
-          p.stroke(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, g.range(8, 55 + dens * 75));
-          p.point(g.range(w), g.range(h));
-        }
+        // silver-halide speckle (orig 80..1800, 70% paper / 30% ink)
+        const n = Math.round(lerp(80, 1800, dens));
+        dust(Math.round(n * 0.5), paper, 22 + dens * 28);
+        dust(Math.round(n * 0.2), paper, 50 + dens * 55);
+        dust(Math.round(n * 0.3), ink, 16 + dens * 24);
       } else if (grainType === 1) {
-        const scratches = Math.round(lerp(1, 16, dens));
+        // hairline scratches over a fine speckle bed
+        const bed = Math.round(lerp(60, 900, dens));
+        dust(Math.round(bed * 0.7), paper, 16 + dens * 30);
+        dust(Math.round(bed * 0.3), paper, 34 + dens * 55);
+        const scratches = Math.round(lerp(1, 18, dens));
         p.noFill();
         for (let i = 0; i < scratches; i++) {
           const x = g.range(w);
@@ -526,25 +643,55 @@ export const lichtspielOpus: VisualTemplate = {
             p.vertex(x + drift * u + Math.sin(u * TWO_PI) * g.range(1, 8), y + len * u);
           }
           p.endShape();
+          if (g.random() < 0.45) {
+            p.stroke(ink[0] ?? 0, ink[1] ?? 0, ink[2] ?? 0, g.range(20, 80));
+            const yy = y + g.range(20, len);
+            p.line(x + g.range(-4, 4), yy, x + g.range(-8, 8), yy);
+          }
         }
       } else if (grainType === 2) {
-        const blooms = Math.round(lerp(1, 26, dens));
+        // dust + bloom over a dust bed
+        dust(Math.round(lerp(40, 700, dens)), paper, 24);
+        const blooms = Math.round(lerp(1, 30, dens));
         p.noFill();
         for (let i = 0; i < blooms; i++) {
-          const s = g.range(6, 70) * dens;
-          p.stroke(paper[0] ?? 0, paper[1] ?? 0, paper[2] ?? 0, g.range(8, 32 + dens * 25));
-          p.ellipse(g.range(w), g.range(h), s * g.range(0.6, 1.8), s * g.range(0.4, 1.4));
-        }
-      } else {
-        const dashes = Math.round(lerp(60, 460, dens));
-        for (let i = 0; i < dashes; i++) {
           const x = g.range(w);
           const y = g.range(h);
-          const len = g.range(2, 18 + dens * 22);
-          const c = g.random() < 0.55 ? paper : ink;
-          p.stroke(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, g.range(8, 44 + dens * 50));
-          p.line(x, y, x + len, y + g.range(-2, 2));
+          const s = g.range(6, 70) * dens;
+          p.stroke(paper[0] ?? 0, paper[1] ?? 0, paper[2] ?? 0, g.range(8, 32 + dens * 25));
+          p.ellipse(x, y, s * g.range(0.6, 1.8), s * g.range(0.4, 1.4));
+          if (g.random() < 0.35) {
+            p.noStroke();
+            p.fill(ink[0] ?? 0, ink[1] ?? 0, ink[2] ?? 0, g.range(8, 24));
+            p.ellipse(x + g.range(-5, 5), y + g.range(-5, 5), s * 0.4, s * 0.25);
+            p.noFill();
+          }
         }
+      } else {
+        // weave dashes (ONE GL_LINES batch per colour) + a few horizontal bands
+        const dashes = Math.round(lerp(80, 1200, dens));
+        const dashBatch = (count: number, c: number[], alpha: number): void => {
+          p.stroke(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, alpha);
+          p.beginShape(p.LINES);
+          for (let i = 0; i < count; i++) {
+            const x = g.range(w);
+            const y = g.range(h);
+            const len = g.range(2, 18 + dens * 22);
+            p.vertex(x, y);
+            p.vertex(x + len, y + g.range(-2, 2));
+          }
+          p.endShape();
+        };
+        dashBatch(Math.round(dashes * 0.55), paper, 26 + dens * 40);
+        dashBatch(Math.round(dashes * 0.45), ink, 26 + dens * 30);
+        const bands = Math.round(lerp(1, 10, dens));
+        p.noStroke();
+        for (let i = 0; i < bands; i++) {
+          const y = g.range(h);
+          p.fill(paper[0] ?? 0, paper[1] ?? 0, paper[2] ?? 0, g.range(4, 16 + dens * 20));
+          p.rect(0, y, w, g.range(1, 4));
+        }
+        p.noFill();
       }
     }
 
@@ -552,50 +699,59 @@ export const lichtspielOpus: VisualTemplate = {
     function drawTunnel3D(p: p5): void {
       const glow = pal(2);
       const paper = pal(4);
-      const ink = pal(1);
-      const contrast = cur.contrast * 0.6 + 0.5;
+      // extended faders: 'contrast' boosts every tube stroke; 'glow' pops the accent rings.
+      const contrast = Math.max(0, cur.contrast * 0.6 + 0.5 + (exContrast - 0.5) * 0.8);
+      const glowAmt = 0.5 + exGlow; // 1 at neutral
+      const SP1 = SEGMENTS + 1;
 
-      // filled TRIANGLE_STRIP shells (the tube surface), FAR → NEAR for clean translucency
-      if (tunnelStyle !== 'wire') {
-        for (let i = RINGS - 2; i >= 0; i--) {
-          const alpha = lerp(150, 8, dN(i));
-          p.stroke(paper[0] ?? 0, paper[1] ?? 0, paper[2] ?? 0, alpha * 0.5 * contrast);
-          p.strokeWeight(1);
-          p.fill(ink[0] ?? 0, ink[1] ?? 0, ink[2] ?? 0, alpha * 0.16);
-          p.beginShape(p.TRIANGLE_STRIP);
-          for (let j = 0; j <= SEGMENTS; j++) {
-            const a = (j / SEGMENTS) * TWO_PI;
-            tubePoint(i + 1, a, dN(i + 1), p, va);
-            tubePoint(i, a, dN(i), p, vb);
-            p.vertex(va[0], va[1], va[2]);
-            p.vertex(vb[0], vb[1], vb[2]);
-          }
-          p.endShape();
-        }
-      }
-
-      // bright contour rings (every other ring), FAR → NEAR
-      p.noFill();
-      p.strokeWeight(tunnelStyle === 'wire' ? 1 : 1.4);
-      const step = tunnelStyle === 'wire' ? 1 : 2;
-      for (let i = RINGS - 1; i >= 0; i -= step) {
+      // Compute the tube point-grid ONCE per frame; fill shells, the mesh and the contour
+      // rings all index into it. The mesh then draws as a few batched GL_LINES calls rather
+      // than ~50 stroked shells — p5 WEBGL rebuilds stroke geometry per shape, so the SHELL
+      // COUNT (not the vertex count) was the 16→60fps cliff. This restores the original's
+      // dense QUAD_STRIP mesh look at 60fps.
+      for (let i = 0; i < RINGS; i++) {
         const d = dN(i);
-        const alpha = lerp(205, 14, d);
-        const c = i % 4 === 0 ? glow : paper;
-        p.stroke(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, alpha * contrast);
-        p.beginShape();
         for (let j = 0; j <= SEGMENTS; j++) {
           const a = (j / SEGMENTS) * TWO_PI;
           tubePoint(i, a, d, p, va);
-          p.vertex(va[0], va[1], va[2]);
+          const k = (i * SP1 + j) * 3;
+          tubeGrid[k] = va[0];
+          tubeGrid[k + 1] = va[1];
+          tubeGrid[k + 2] = va[2];
         }
+      }
+      const vtx = (i: number, j: number): void => {
+        const k = (i * SP1 + j) * 3;
+        p.vertex(tubeGrid[k] ?? 0, tubeGrid[k + 1] ?? 0, tubeGrid[k + 2] ?? 0);
+      };
+
+      // (No stroked fill shells: in p5 WEBGL the per-frame stroke-geometry build is the cost,
+      // and a filled+stroked TRIANGLE_STRIP is the worst case. The rings self-occlude via the
+      // depth test, and the original's fill is near-invisible (alpha ~1–20), so dropping it
+      // costs ~nothing visually and buys the faithful 52-ring density at 60fps.)
+
+      // 1) tube rings — EVERY ring (the dense look the original's shell stroke gave); every
+      //    4th is a bright glow contour accent, the rest a dimmer paper mesh ring. p5 WEBGL
+      //    stroke cost is per CPU-built line-segment, so dense rings + a handful of strands
+      //    is the ~60fps density budget (the full ring×axial grid blew it at 25fps).
+      p.noFill();
+      for (let i = RINGS - 1; i >= 0; i--) {
+        if (tunnelStyle === 'wire' && i % 2 !== 0) continue;
+        const d = dN(i);
+        const accent = i % 4 === 0;
+        const c = accent ? glow : paper;
+        const alpha = (accent ? lerp(205, 14, d) * glowAmt : lerp(95, 6, d)) * contrast;
+        p.stroke(c[0] ?? 0, c[1] ?? 0, c[2] ?? 0, alpha);
+        p.strokeWeight(accent ? 1.4 : 1);
+        p.beginShape();
+        for (let j = 0; j <= SEGMENTS; j++) vtx(i, j);
         p.endShape(p.CLOSE);
       }
 
-      // twisting longitudinal strands
-      if (tunnelStyle !== 'wire') {
-        const strands = 16;
-        p.stroke(glow[0] ?? 0, glow[1] ?? 0, glow[2] ?? 0, 64);
+      // 2) twisting longitudinal strands — the axial mesh structure (their own twist angle).
+      {
+        const strands = tunnelStyle === 'wire' ? 10 : Math.round(8 + exStrands * 16); // 16 at neutral
+        p.stroke(glow[0] ?? 0, glow[1] ?? 0, glow[2] ?? 0, 40 + exStrands * 60); // 70 at neutral
         p.strokeWeight(1);
         for (let s = 0; s < strands; s++) {
           const a = (s / strands) * TWO_PI + arcTwist * 0.4;
@@ -623,7 +779,7 @@ export const lichtspielOpus: VisualTemplate = {
         const orbitR = base * lerp(0.05, 0.42, p.noise(i * 4.1, t * 0.04));
         const x = orbitR * Math.cos(a + arcTwist * 0.7);
         const y = orbitR * Math.sin(a * 1.3 - arcTwist * 0.5);
-        const sz = lerp(base * 0.06, base * 0.26, p.noise(20 + i, t * 0.2)) * (1 + undulationN * 0.3);
+        const sz = lerp(base * 0.06, base * 0.26, p.noise(20 + i, t * 0.2)) * (1 + undulationN * 0.3) * (0.5 + exMorph); // 'morph' fader
         const pulse = 1 + 0.45 * Math.sin(t * (1.2 + i * 0.05) + i);
         p.push();
         p.translate(x, y, z);
@@ -671,7 +827,7 @@ export const lichtspielOpus: VisualTemplate = {
 
     function drawVolumetricGrain3D(p: p5): void {
       if (damage < 0.08) return;
-      const count = Math.round(lerp(20, 220, damage * (0.5 + grainMod)));
+      const count = Math.round(lerp(20, 260, damage) * (0.5 + grainMod)); // orig 20..260
       const g = createRng((ctx.seed + Math.floor(elapsed * 60) * 997 + grainType * 811) | 0);
       const base = tubeRadius();
       const paper = pal(4);

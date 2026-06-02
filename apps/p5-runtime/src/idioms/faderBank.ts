@@ -32,7 +32,17 @@ export interface FaderLane {
 }
 
 export interface FaderBankOptions {
+  /** The sketch's NATIVE fader lanes — always reachable; fold onto fewer columns. */
   lanes: FaderLane[];
+  /**
+   * BONUS lanes that appear ONLY when the grid has more columns than the native
+   * lanes need (a 64-native sketch's spare cols on a Grid 128). They bind to the
+   * columns just past the native block, and are DORMANT — each returns its
+   * `initial`, so choose a NEUTRAL default that reproduces the sketch's base look —
+   * when there's no room. The "adapt up" mirror of the grid-fold. Requires
+   * `spread:false`.
+   */
+  extendedLanes?: FaderLane[];
   /** spread lanes into panels across the full grid width (default true). */
   spread?: boolean;
 }
@@ -56,7 +66,11 @@ interface LaneState {
 export function createFaderBank(opts: FaderBankOptions): FaderBank {
   const spread = opts.spread ?? true;
   let profile: IdiomProfile = EMPTY_PROFILE;
-  const lanes: LaneState[] = opts.lanes.map((l) => ({
+  // lanes = native ++ extended; extended bind only to columns beyond the native block
+  // (and only when the grid is wide enough) — see coveredLanes.
+  const srcLanes: FaderLane[] = [...opts.lanes, ...(opts.extendedLanes ?? [])];
+  const nativeCount = opts.lanes.length;
+  const lanes: LaneState[] = srcLanes.map((l) => ({
     name: l.name,
     label: l.label,
     mode: l.mode ?? 'continuous',
@@ -68,7 +82,7 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
 
   /** Columns per lane for a given grid width (1 on a tight fit, wider when spread). */
   const widthFor = (cols: number): number =>
-    spread ? Math.max(1, Math.floor(cols / Math.max(1, lanes.length))) : 1;
+    spread ? Math.max(1, Math.floor(cols / Math.max(1, nativeCount))) : 1;
   /**
    * The logical lanes a physical column drives. Spread → one lane (its panel).
    * Else 1:1 while the lanes fit; when there are MORE lanes than columns the bank
@@ -79,12 +93,16 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
   const coveredLanes = (x: number, cols: number): number[] => {
     if (x < 0 || x >= cols) return [];
     if (spread) {
-      const idx = Math.min(lanes.length - 1, Math.floor(x / widthFor(cols)));
+      const idx = Math.min(nativeCount - 1, Math.floor(x / widthFor(cols)));
       return idx >= 0 ? [idx] : [];
     }
-    if (lanes.length <= cols) return x < lanes.length ? [x] : [];
+    // Native lanes fold DOWN only when they outnumber the columns. When they fit it's
+    // 1:1, and the EXTENDED lanes occupy the columns just past the native block
+    // (cols [nativeCount, lanes.length)); columns beyond that are free. Extended lanes
+    // never fold — with no room they stay dormant at their initial value.
+    if (nativeCount <= cols) return x < lanes.length ? [x] : [];
     const out: number[] = [];
-    for (let l = x; l < lanes.length; l += cols) out.push(l);
+    for (let l = x; l < nativeCount; l += cols) out.push(l);
     return out;
   };
 
@@ -166,16 +184,20 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
         const covered = coveredLanes(x, cols);
         if (covered.length === 0) {
           prevKey = '';
-          continue; // a spare / scene-select column
+          continue; // a free column (no lane bound here)
         }
         const key = covered.join(',');
         if (key === prevKey) continue; // same spread panel — describe once
         prevKey = key;
         const coupled = covered.length > 1;
+        const extended = covered.every((i) => i >= nativeCount);
         grid.push({
           area: spread ? `panel @ col ${x}` : `col ${x}`,
           action: 'press a row',
-          effect: covered.map(laneLabel).join(' + ') + (coupled ? ' · coupled' : ''),
+          effect:
+            covered.map(laneLabel).join(' + ') +
+            (coupled ? ' · coupled' : '') +
+            (extended ? ' · extended' : ''),
         });
       }
       return { grid, arc: [] };
@@ -188,7 +210,7 @@ export function createFaderBank(opts: FaderBankOptions): FaderBank {
     reset(): void {
       held.clear();
       for (let i = 0; i < lanes.length; i++) {
-        const src = opts.lanes[i];
+        const src = srcLanes[i];
         const lane = lanes[i];
         if (!lane || !src) continue;
         lane.value = clamp01(src.initial ?? 0.5);

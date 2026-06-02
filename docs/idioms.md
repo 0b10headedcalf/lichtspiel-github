@@ -73,14 +73,29 @@ it keeps dim every-8th orientation notches in the un-lit region, so a ring reads
 marked dial you fill toward rather than blank-until-max (the look the hero's arc LEDs
 established). `comet`/`playhead`/the phase-comets already carry their own marks.
 
-**3. Wider grid → spread / spare columns.**
-`faderBank` `spread:true` lays lanes into multi-column panels. With `spread:false`
-and lanes ≤ cols, the extra columns are free — e.g. a Grid 128's cols 8–15 do
-scene-select via `ctx.controls.selectSceneIndex` (the Opus III hero).
+**3. Wider hardware → EXTENDED controls ("adapt up"), the mirror of folding.**
+A sketch NATIVE to *small* hardware (the Opus III hero is Grid 64 / Arc 2) gets more
+expressive on a bigger device by declaring **bonus** controls that light up only when
+there's room — never a scene-switch, never coupled into the native pair:
+- **`faderBank` `extendedLanes`** — bind to the columns just past the native block
+  (a Grid 128's cols 8–15 become 8 more faders of the SAME sketch).
+- **`arcMacros` `extendedEncoders`** — bind to the physical encoders past the native
+  count (an Arc 4's enc 2–3 become 2 more knobs).
 
-The folding lives **entirely in the idiom layer**, so every sketch — current and
-future — inherits it. **A new sketch just declares its logical idioms; you never
-write a per-hardware branch.**
+Extended controls are **dormant at a neutral default** when there's no room — so the
+Grid 64 / Arc 2 build is *byte-identical* — and on an Arc 2 they never couple into the
+native pair (clean twist + aperture; the extended orbit/grain stay asleep). Each
+extended control's `initial` MUST reproduce the sketch's base look (it's the value read
+when dormant). `describe()` marks them `· extended` so the gestural panel surfaces them
+on the bigger rig. *(With `spread:true`, lanes still lay into multi-column panels.)*
+
+**Pick fold-down vs extend-up by the sketch's NATIVE size.** Authored for BIG hardware
+→ its many controls FOLD down (couple/page) so nothing's lost on a small device (point
+2). Authored for SMALL hardware → it adds EXTENDED controls that appear on a big device
+(point 3). A control that must always be reachable is *native*; bonus expressivity is
+*extended*. Both directions live **entirely in the idiom layer**, so every sketch —
+current and future — inherits them. **A 64/2-native sketch just lists `extendedLanes` /
+`extendedEncoders`; you never write a per-hardware branch or steal the grid for nav.**
 
 **Capabilities also adapted** (from `IdiomProfile`): monobright vs varibright (the
 bridge binarizes to on/off + global intensity; the twin/idiom still track logical
@@ -144,6 +159,11 @@ To bring a windchime sketch-family in faithfully:
   let them fold.
 - **Don't leave a control unreachable on smaller hardware** — that's what coupling
   is for. If turning an encoder leaves some objects frozen, you skipped the fold.
+- **Don't steal the sketch's grid/encoders for scene-nav on bigger hardware.** A
+  64/2-native sketch's spare cols/encoders on a Grid 128 / Arc 4 are for MORE of the
+  SAME sketch — declare `extendedLanes` / `extendedEncoders` (each with a neutral
+  `initial`), never route them to `selectScene`. Scene nav lives on the keyboard /
+  Ableton. (And don't let extended controls couple into the native pair on small hw.)
 - **Don't rewrite a native-hardware sketch — make VARIANTS.** When a sketch's
   original hardware matches the connected device (e.g. the Opus III hero on its
   native Grid 64/Arc 2), port it *faithfully* then layer windchime-style variants.
@@ -158,15 +178,24 @@ To bring a windchime sketch-family in faithfully:
 (`scripts/idioms-smoke.ts`, via tsx): instantiates every idiom under a Grid 64/Arc
 2 AND a Grid 128/Arc 4 profile, fires synthetic events, and asserts `values()`
 change, correctly-sized/lit frames, push-gating, compose-overlap, **the folding**
-(arc turn-coupling + press cycle/all + paging chord; faderBank columns fold), the
-`fillNotched` ring, and the live `describe()` control map. Keep it green — it's the
-proof the underlying representation adapts without a browser or hardware.
+(arc turn-coupling + press cycle/all + paging chord; faderBank columns fold), **the
+adapt-up** (`extendedLanes` bind a Grid 128's cols 8–15 + `extendedEncoders` an Arc 4's
+enc 2–3, both dormant + uncoupled on the small rig), the `fillNotched` ring, and the
+live `describe()` control map (**93 checks**). Keep it green — it's the proof the
+underlying representation adapts without a browser or hardware.
 
-## Remaining
+## Status + future
 
-All 8 windchime families are faithfully ported, with arc turn-coupling/paging +
-`fillNotched` LEDs + the hardware-adaptive panel applied. The native **Opus III
-hero** (`lichtspielOpus`) gets its faithful WEBGL re-port of `Lichtspiel_v3.pde`
-(the reduced P2D version is being replaced) + windchime-style variants — per the
-native-hardware rule above. Pending: the user's Grid 128 / Arc 4 hot-swap pass to
-confirm every idiom adapts both directions on real hardware.
+All 8 windchime families + the native **Opus III hero** (`lichtspielOpus`) are
+faithfully ported. The hero's WEBGL re-port + 60fps tube + the **adapt-up** extended
+controls are **user-verified on real hardware, both directions**: Grid 128 / Arc 4
+expands to 16 faders + 4 encoders, and hot-swapping back to Grid 64 / Arc 2 collapses
+to the native 8 + 2, byte-identical.
+
+**Future — close the recursion (a note, not yet built).** Adapt-up currently leaves a
+64/2-native sketch's extended controls *dormant* on the small rig. The loop closes by
+letting the **same fold/page machinery** (point 2) collapse the FULL set — native +
+extended (e.g. the hero's 16 faders + 4 encoders) — back onto a Grid 64 / Arc 2, so the
+performer can reach the extras there too via coupling / a page or shift, instead of them
+sleeping. Expansion (small → big) then folding (big → small) compose into one round
+trip: any sketch, authored for any device, fully playable on any other.

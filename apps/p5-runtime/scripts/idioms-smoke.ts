@@ -498,6 +498,100 @@ function checkDescribe(): void {
   ok(paged.describe(arc2).page?.index === 1, 'describe: a chord advances the reported page index');
 }
 
+// adapt UP — a 64/2-NATIVE sketch's spare real estate on a bigger device becomes MORE
+// of its OWN controls (extendedLanes / extendedEncoders), never a scene-switch, and stays
+// DORMANT at a neutral default on the native device so Grid 64 / Arc 2 is byte-identical.
+function checkAdaptUp(): void {
+  console.log('\n[adapt up — native + extended controls]');
+  const g64 = profileFromSetup({ grid: GRID_64, arc: ARC_2 });
+  const g128 = profileFromSetup({ grid: GRID_128, arc: ARC_4 });
+  const arc2 = profileFromSetup({ grid: null, arc: ARC_2 });
+  const arc4 = profileFromSetup({ grid: null, arc: ARC_4 });
+
+  // faderBank: 8 native + 8 extended (the opus shape).
+  const mkBank = () =>
+    createFaderBank({
+      spread: false,
+      lanes: Array.from({ length: 8 }, (_, i) => ({ name: `n${i}`, initial: 0.3 })),
+      extendedLanes: Array.from({ length: 8 }, (_, i) => ({ name: `x${i}`, initial: 0.5 })),
+    });
+
+  // Grid 64: the extended lanes have NO column — dormant at their neutral initial.
+  {
+    const b = mkBank();
+    b.setProfile(g64);
+    b.onGridKey(gk(0, 0, 1)); // native col 0 top → 1
+    b.onGridKey(gk(0, 0, 0));
+    const v = b.values();
+    ok(v.n0 === 1, 'adaptUp: Grid 64 native fader still works (n0=1)');
+    ok(v.x0 === 0.5 && v.x7 === 0.5, 'adaptUp: Grid 64 extended faders dormant at neutral');
+    const f = createLedFrame();
+    b.renderGrid(f, g64);
+    ok(gridOutsideSum(f, g64.rows, g64.cols) === 0, 'adaptUp: Grid 64 lights nothing beyond its 8 cols');
+  }
+
+  // Grid 128: extended lanes occupy cols 8–15 — col 8 drives the FIRST extended fader
+  // (NOT scene-select), and those columns light up.
+  {
+    const b = mkBank();
+    b.setProfile(g128);
+    b.onGridKey(gk(8, 0, 1)); // top of col 8 → extended lane x0 = 1
+    b.onGridKey(gk(8, 0, 0));
+    ok(b.values().x0 === 1, 'adaptUp: Grid 128 col 8 drives extended fader x0 (not scene-select)');
+    b.onGridKey(gk(15, 7, 1)); // bottom of col 15 → extended lane x7 = 0
+    b.onGridKey(gk(15, 7, 0));
+    ok(b.values().x7 === 0, 'adaptUp: Grid 128 col 15 drives extended fader x7');
+    const f = createLedFrame();
+    b.renderGrid(f, g128);
+    let col8plus = 0;
+    for (let y = 0; y < g128.rows; y++) for (let x = 8; x < g128.cols; x++) col8plus += f.grid[y]?.[x] ?? 0;
+    ok(col8plus > 0, 'adaptUp: Grid 128 lights the extended columns 8–15');
+  }
+
+  // arcMacros: 2 native + 2 extended (the opus shape).
+  const mkArc = () =>
+    createArcMacros({
+      encoders: [
+        { name: 'twist', initial: 0.25 },
+        { name: 'aperture', initial: 0.25 },
+      ],
+      extendedEncoders: [
+        { name: 'orbit', mode: 'relative', initial: 0 },
+        { name: 'grain', initial: 0.5 },
+      ],
+    });
+
+  // Arc 2: the extended encoders are DORMANT — enc0 raises ONLY native twist, never
+  // couples into orbit (the cross-talk fix).
+  {
+    const a = mkArc();
+    a.setProfile(arc2);
+    a.onArcDelta(ad(0, 20));
+    const v = a.values();
+    ok(v.twist > 0.25, 'adaptUp: Arc 2 enc0 raises native twist');
+    ok(v.orbit === 0 && v.grain === 0.5, 'adaptUp: Arc 2 extended encoders dormant (no cross-talk)');
+  }
+  // Arc 4: the extended encoders bind to enc 2–3 — enc2 raises orbit, not native twist.
+  {
+    const a = mkArc();
+    a.setProfile(arc4);
+    a.onArcDelta(ad(2, 20));
+    const v = a.values();
+    ok(v.orbit !== 0, 'adaptUp: Arc 4 enc2 drives extended orbit');
+    ok(v.twist === 0.25, 'adaptUp: Arc 4 enc2 does not touch native twist');
+  }
+
+  // describe() marks the extended controls so the gestural panel surfaces them.
+  {
+    const b = mkBank();
+    b.setProfile(g128);
+    ok(/extended/.test(b.describe(g128).grid.map((e) => e.effect).join(' | ')), 'adaptUp: describe marks Grid 128 extended faders');
+    const a = mkArc();
+    a.setProfile(arc4);
+    ok(/extended/.test(a.describe(arc4).arc.map((e) => e.effect).join(' | ')), 'adaptUp: describe marks Arc 4 extended encoders');
+  }
+}
+
 // ── run ───────────────────────────────────────────────────────────
 console.log('idioms-smoke — capability-aware monome idiom library');
 checkProfile('grid64/arc2', { grid: GRID_64, arc: ARC_2 });
@@ -505,6 +599,7 @@ checkProfile('grid128/arc4', { grid: GRID_128, arc: ARC_4 });
 checkPushGating();
 checkArcFolding();
 checkArcCoupling();
+checkAdaptUp();
 checkFillNotched();
 checkDescribe();
 checkVelocityMode();

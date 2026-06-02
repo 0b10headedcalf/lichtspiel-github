@@ -141,7 +141,7 @@ vs 128 / arc 2 vs 4 adapts the surface ✅ · rapid input never freezes ✅.
 input (grid.key/arc.delta/arc.key incl. coalesced deltas), performance feedback
 (fader columns + arc comets), and the Fast ∥ sweep all confirmed end-to-end.
 
-## Phase 4.5 — Animation corpus + monome idiom layer 🟡 (in progress)
+## Phase 4.5 — Animation corpus + monome idiom layer ✅ (hardware-verified, both hot-swap directions)
 
 Bring the windchime-animation p5 sketch corpus into Lichtspiel as capability-aware,
 hardware-adaptive templates with a reusable monome "idiom" abstraction + variant
@@ -190,7 +190,7 @@ Decisions: adapt windchime p5 + variants · hybrid control (uniform fader baseli
   `parquetDeformation`, `pasHalloween`) was re-ported via a strict-fidelity parallel
   Workflow + browser-verified (60/43/36 fps, no console errors, variant browse +
   twin LED mirror confirmed).
-- 🟡 **Coupling rework** (Stage 1 done, plan `jaunty-wobbling-simon.md`): the user's
+- ✅ **Coupling rework** (plan `jaunty-wobbling-simon.md`): the user's
   Grid-64/Arc-2 play surfaced that the GRID folds but the arc TURNS didn't (half the
   objects uncontrollable). Added **arc turn-coupling** (`fold:'couple'` — physical
   encoder drives logical {p,p+P,…} together; press cycle/all) + **paging**
@@ -206,8 +206,29 @@ Decisions: adapt windchime p5 + variants · hybrid control (uniform fader baseli
   sphere morphs, and volumetric 3D grain, inside the 2D film language (backplate, rect
   forms, bursts, film gate + sprocket holes + 4 grain types) layered by depth-test
   toggling. 8 faders + arc twist/aperture + 8 palettes + variants kept. Browser-verified
-  at 60fps; variants re-roll palette/tunnel/forms. **Open:** the user's Grid-64/Arc-2
-  hardware pass (hero + patternGridWorld 4-page) + the Grid-128/Arc-4 hot-swap pass.
+  at 60fps; variants re-roll palette/tunnel/forms.
+- ✅ **Hero fidelity finish (2026-06-02, user-accepted).** Re-read `Lichtspiel_v3.pde`
+  side-by-side + matched the original: HEIGHT-relative framing (mouth +0.286·H toward the
+  camera — the immersive scale the earlier port had halved), the `rotateY(arcTwist*0.9)`
+  camera orbit, the ~4.2-rad helical strand twist, faithful forward travel (~9.6 rings/s·
+  filmSpeed), the bulge field's breathing + depth/angle swim, the dense 4-type film grain
+  (speckle/dust beds + weave bands restored), and the full Ruttmann composition (moving
+  bars + panels + iris aperture + rotating diagonal). **p5-WEBGL perf:** stroking a filled
+  `TRIANGLE_STRIP` rebuilds line geometry per-frame on the CPU (a 16fps cliff), so the tube
+  became every-ring stroked loops + 16 strands (the original's dense mesh approximated
+  within a ~4000-segment/60fps budget; no stroked fill shells) — solid 60fps. Grid-64/
+  Arc-2 hardware-verified.
+- ✅ **Adapt-up — 64/2-native sketches expand onto bigger hardware (2026-06-02, both
+  directions hardware-verified).** The idiom layer gained `faderBank.extendedLanes` +
+  `arcMacros.extendedEncoders`: a sketch NATIVE to small hardware declares BONUS controls
+  that light up only when there's room (a Grid 128's cols 8–15, an Arc 4's enc 2–3) and
+  stay DORMANT at a neutral default otherwise — so the small rig is byte-identical and the
+  extras never couple into the native pair. The hero now extends to 16 faders (8 native +
+  contrast/sway/strands/morph/vignette/bursts/flicker/glow) + 4 encoders (twist/aperture +
+  orbit/grain); grid scene-select removed (nav → keyboard/Ableton); the opus wires
+  `controlMap` so the panel is hardware-accurate. **93 idiom-smoke checks.** See
+  `docs/idioms.md`. **🔭 Future:** close the recursion — fold/page the FULL native +
+  extended set back onto a Grid 64 / Arc 2 so the extras are reachable there too (a note).
 
 ## Phase 5 — Metadata retrieval 🟡 (head start shipped)
 
