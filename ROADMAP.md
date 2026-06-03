@@ -243,6 +243,39 @@ Ableton state *suggests* visuals (rule-based, no model).
 **Acceptance:** different clips yield different visual choices · lock prevents
 auto-change · manual override always wins · result includes a reason.
 
+### Phase 5a — Ableton → Lichtspiel: scene-launch + locator auto-retrieval ✅ working in-Live · ⚠️ perf refinement pending
+
+The first on-the-fly AV trigger: a Session **scene launch** or an Arrangement
+**locator crossing** auto-loads a fresh random variant of a template, instantly
+monome-playable (idioms stay live), hot-swapping per song section.
+
+- ✅ **M4L** (`max/js/live_api_helpers.js`): a 2nd `js` outlet emits
+  `/lichtspiel/scene/launch <i> <name>` (dominant playing Session row) +
+  `/lichtspiel/locator <i> <name>` (cue_points × current_song_time crossing,
+  forward-only with a seek guard). Recipe: `max/docs/max_patch_notes.md` Test D.
+- ✅ **Bridge**: `oscRouter` decodes both addresses → `scene.launched` /
+  `locator.crossed` wire messages → broadcast to p5 (`websocketServer`);
+  `osc-selftest` covers both; `pnpm send scene.launch|locator`.
+- ✅ **p5**: `live/abletonRetrieval.ts` `pickTemplate(evt, mode, …)` →
+  `variants.newVariant`; `main.ts` `respond()` respects the on-screen lock. Two
+  toggles: **retrieval mode** `mapped` ⇄ `random` (`m`) and **event source**
+  `live` ⇄ `simulated` (`e`); simulate keys `k`/`l`. HUD readouts.
+- ✅ **ableton-mcp** (testing accelerator, NOT a runtime dep): `ahujasid/ableton-mcp`
+  installed + extended (`fire_scene` / `set_song_position` / `get_scene_info`) so
+  scenes/playhead can be driven + the LOM introspected. Socket 9877, separate from
+  `/lichtspiel` OSC (7400). See `docs/ableton-integration.md`.
+- ✅ Verified headless (bridge `test:osc` 5/5; `pnpm send` + the `simulated`
+  toggle → preview swaps template + variant; lock suppression + live-source gating).
+- ✅ Verified **in-Live** end-to-end (ADE_Sleuth): scene launches + locator crossings
+  hot-swap the p5 visual through the real M4L device; Session/Arrangement modes are
+  cleanly separated (driven via ableton-mcp). Reliable — every event fires.
+- ⚠️ **Perf refinement pending:** on a heavy (24-track) set, detection lags ~1–2 s
+  and Live can get laggy — `LiveAPI.get` polling is too slow there for the 250 ms
+  metro. Planned fix = event-driven LiveAPI observers (no per-tick scanning). Full
+  write-up in `docs/ableton-integration.md` → "Known issues & refinement TODO".
+- 🔭 Deferred: name-based semantic retrieval as a 3rd mode (`ml-service/retrieve.py`
+  already exists); richer Ableton rules; eventually constrained generation.
+
 ## Phase 6 — MIDI/audio descriptors ⬜
 
 Musical structure influences visuals.

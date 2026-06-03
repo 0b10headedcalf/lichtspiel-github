@@ -72,6 +72,49 @@ params.update and `/scene` → scene.select (both verified live).
 (The `live.dial`s auto-register as mappable M4L parameters — the start of the
 real device UI; 3b adds layout/labels.)
 
+## Test D — scene-launch + locator events (Phase 5a)
+
+The probe now also emits two retrieval triggers on a **2nd `js` outlet**, so Lichtspiel
+auto-loads a fresh visual on a Session scene launch or an Arrangement locator crossing:
+
+- `/lichtspiel/scene/launch <index> <name>` — when the playing Session scene changes.
+- `/lichtspiel/locator <index> <name>` — when the playhead crosses an Arrangement locator.
+
+`live_api_helpers.js` already reads the cue points + watches the playhead; you just wire the
+new outlet. **One cord to add:**
+
+1. In the `LichtspielHub` device editor, the `js live_api_helpers.js` object now shows **two
+   outlets** (Max re-reads the script on save; if it still shows one, delete the `js` box and
+   retype `js live_api_helpers.js`, or just save the device).
+2. Drag a cord from the **2nd (right) outlet** of the `js` straight into the existing
+   **`[udpsend 127.0.0.1 7400]`** — *no* `[prepend]` (outlet 1 already carries the full OSC
+   address). Leave outlet 0 → `[prepend /lichtspiel/state]` exactly as is.
+3. **Cmd+S.**
+
+Verify (with `pnpm dev:bridge` + `pnpm dev:p5`):
+- **Locators (solid):** play the Arrangement across the named locators (Intro/buildup/Drop/…).
+  Each crossing logs `locator.crossed … "Drop"` at the bridge and hot-swaps the p5 visual to a
+  fresh variant. Forward playback only — a rewind or a seek won't fire.
+- **Scenes:** launch Scene1 / Scene2 in Session view → `scene.launched …` + a swap.
+- Headless alt (no Live): `pnpm send locator 2 Drop` / `pnpm send scene.launch 0 Scene1`, or
+  the p5 `simulated` event-source toggle (press `e`, then `k`/`l`).
+
+**Scene detection** uses the **playing Session row** — the row of the first track with a
+playing `track.playing_slot_index` (in a launched scene every track shares that row). The LOM
+exposes no "playing scene" property and `is_triggered` is too brief to poll (verified in
+ADE_Sleuth via ableton-mcp: Scene1 → row 0, Scene2 → row 1; `is_triggered` never registered).
+**Session vs Arrangement** is read from `back_to_arranger`: while Session overrides (=1) scene
+launches fire and locators are suppressed; in Arrangement (=0) locators fire and the row scan
+is skipped — so a drifting arrangement playhead under a launched scene can't fire spurious
+locators. Locator crossings are forward-motion only (`SEEK_GUARD_BEATS` guards seeks/jumps).
+`SEEK_GUARD_BEATS` / `CUE_REFRESH_TICKS` / `SCENE_SCAN_TICKS` / `STATE_TICKS` at the top of the
+js are tunable.
+
+> ⚠️ **Known issue (revisit):** on a large/heavy set the polling lags ~1–2 s and Live can get
+> laggy — see `docs/ableton-integration.md` "Known issues & refinement TODO" (planned fix:
+> event-driven LiveAPI observers). Also: after editing the js, **fully reload the device**
+> (autowatch lags on a loaded set); keep the js **ASCII + ES5**.
+
 ## 3b — device face (manual Presentation view)
 
 Cosmetic only — the device already works without it. It **can't be reliably
