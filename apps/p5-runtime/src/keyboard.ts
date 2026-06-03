@@ -24,6 +24,8 @@ export interface KeyboardHandlers {
   toggleEmulator(): void;
   /** Toggle the gestural control-map panel. */
   toggleGestural(): void;
+  /** Toggle the Ableton scene/locator → animation mapping panel. */
+  toggleAbletonPanel(): void;
   /** Cycle the Ableton retrieval mode: mapped ⇄ random. */
   cycleRetrievalMode(): void;
   /** Cycle the event source: live (real OSC) ⇄ simulated (UI-fired). */
@@ -97,6 +99,9 @@ export function installKeyboard(h: KeyboardHandlers): () => void {
       case 'KeyH':
         h.toggleGestural();
         break;
+      case 'KeyA':
+        h.toggleAbletonPanel();
+        break;
       case 'KeyN':
         h.next();
         break;
@@ -137,6 +142,6 @@ export const KEYBOARD_HELP = [
   '[ ] density · - = motion',
   'space lock · r randomize · s surprise',
   'v new variant · c canonical · , . step variant',
-  'd debug · g monome twin · h gestures',
+  'd debug · g monome twin · h gestures · a mapping',
   'm retrieval mode · e event source · k/l sim scene/locator',
 ].join('\n');

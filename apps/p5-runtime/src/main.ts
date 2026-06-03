@@ -8,9 +8,11 @@
 
 import './style.css';
 import {
+  type AbletonMapping,
   type LedFramePayload,
   type NumericParamKey,
   type VisualParamVector,
+  ADE_SLEUTH_SNAPSHOT,
   clamp01,
   describeSetup,
   wire,
@@ -32,8 +34,10 @@ import {
   type AbletonEvent,
   type EventSource,
   type RetrievalMode,
-  pickTemplate,
+  resolveActivation,
 } from './live/abletonRetrieval.js';
+import { mergeSnapshot, parseMapping } from './live/abletonMappings.js';
+import { AbletonMappingPanel } from './ui/abletonMappingPanel.js';
 import { createRng, randomSeed } from './seededRng.js';
 import type { VisualTemplate } from './visualTemplate.js';
 
@@ -114,6 +118,56 @@ const SIM_LOCATORS = ['Intro', 'buildup', 'Drop', 'next', 'hats back', 'END'];
 let simSceneN = 0;
 let simLocN = 0;
 
+// Saved scene/locator → animation mapping (Phase 5b). Held here for the resolver;
+// the panel edits it; localStorage caches it across reloads. The bridge owns the
+// authoritative JSON files from Part C; named Save/Load use localStorage in this
+// part (Part C re-points them to the bridge).
+const MAPPING_LS = 'lichtspiel.ableton.mapping';
+const NAMES_LS = 'lichtspiel.ableton.names';
+function saveLocalMapping(m: AbletonMapping | null): void {
+  try {
+    if (m) localStorage.setItem(MAPPING_LS, JSON.stringify(m));
+  } catch {
+    /* ignore quota */
+  }
+}
+function loadLocalMapping(): AbletonMapping | null {
+  try {
+    const raw = localStorage.getItem(MAPPING_LS);
+    return raw ? parseMapping(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function localNames(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(NAMES_LS) ?? '[]');
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+function localSaveNamed(name: string, m: AbletonMapping): void {
+  try {
+    localStorage.setItem(`lichtspiel.ableton.map.${name}`, JSON.stringify(m));
+    const names = localNames().filter((n) => n !== name);
+    names.push(name);
+    localStorage.setItem(NAMES_LS, JSON.stringify(names));
+  } catch {
+    /* ignore quota */
+  }
+}
+function localLoadNamed(name: string): AbletonMapping | null {
+  try {
+    const raw = localStorage.getItem(`lichtspiel.ableton.map.${name}`);
+    return raw ? parseMapping(raw) : null;
+  } catch {
+    return null;
+  }
+}
+let abletonMap: AbletonMapping | null = loadLocalMapping();
+let bridgeConnected = false; // drives bridge-vs-local for Refresh/Save/Load (Phase 5b)
+
 // The gestural panel (control map + variant readout, toggled with `h`) and the
 // variant browser (new / canonical / step through each template's structural
 // space, live). The browser is the single template-mount authority: it re-mounts
@@ -153,6 +207,60 @@ function selectScene(template: VisualTemplate, manual: boolean): void {
   variants.show(template); // mount at the family's current variant + refresh the panel
 }
 
+// Ableton mapping panel (Phase 5b) — top-right, toggle `a`. Edits `mapping`
+// above; Refresh pulls a snapshot (Part B: the ADE_Sleuth fixture; Part C: the
+// bridge). Preview ▶ fires a row's event locally through respond().
+const mappingPanel = new AbletonMappingPanel({
+  templates: registry.catalog().map((t) => ({ id: t.id, name: t.name })),
+  onRefresh: () => {
+    // Bridge → real Ableton snapshot (fixture fallback there); browser-only → local fixture.
+    if (bridgeConnected) {
+      bridge.send(wire('ableton.snapshotRequest', {}));
+      return;
+    }
+    abletonMap = mergeSnapshot(abletonMap, ADE_SLEUTH_SNAPSHOT);
+    mappingPanel.setMapping(abletonMap);
+    saveLocalMapping(abletonMap);
+  },
+  onSave: (name) => {
+    if (!abletonMap) return;
+    abletonMap = { ...abletonMap, setName: name, updatedAt: new Date().toISOString() };
+    saveLocalMapping(abletonMap); // local cache, always
+    mappingPanel.setMapping(abletonMap);
+    if (bridgeConnected) {
+      bridge.send(wire('mapping.request', { op: 'save', name, mapping: abletonMap }));
+    } else {
+      localSaveNamed(name, abletonMap);
+      mappingPanel.setNames(localNames());
+    }
+  },
+  onLoad: (name) => {
+    if (bridgeConnected) {
+      bridge.send(wire('mapping.request', { op: 'load', name }));
+      return;
+    }
+    const m = localLoadNamed(name);
+    if (m) {
+      abletonMap = m;
+      mappingPanel.setMapping(abletonMap);
+      saveLocalMapping(abletonMap);
+    }
+  },
+  onListRequest: () => {
+    if (bridgeConnected) bridge.send(wire('mapping.request', { op: 'list' }));
+    else mappingPanel.setNames(localNames());
+  },
+  onPreview: (evt) => respond(evt),
+  onEdit: (m) => {
+    abletonMap = m;
+    saveLocalMapping(m);
+  },
+});
+mappingPanel.setMapping(abletonMap);
+mappingPanel.setSource(eventSource);
+mappingPanel.setFallback(retrievalMode);
+mappingPanel.setLock(locked);
+
 // ── Bus wiring ───────────────────────────────────────────────────────
 bus.on('scene.select', ({ sceneId }) => {
   const t = registry.get(sceneId);
@@ -173,12 +281,35 @@ bus.on('live.state', (state) => {
 // from the M4L device via the bridge; in `simulated` source they're fired from
 // the keyboard (k/l) through this same path.
 function respond(evt: AbletonEvent): void {
-  if (locked) return;
-  const t = pickTemplate(evt, retrievalMode, registry, lastAutoId);
-  if (!t) return;
-  lastAutoId = t.id;
-  variants.newVariant(t); // mounts t (switching scene if needed) + re-rolls a variant
-  debug.setAbletonEvent(evt, t.name);
+  const d = resolveActivation(evt, abletonMap, retrievalMode, registry, lastAutoId);
+  if (d.kind === 'none') return;
+  if (locked) {
+    // Event received, but the performer locked the visual — surface it, don't swap.
+    debug.setAbletonEvent(evt, '(locked)', { suppressed: 'lock' });
+    mappingPanel.markTriggered(evt, '🔒 locked');
+    return;
+  }
+  if (d.kind === 'suppressed') {
+    debug.setAbletonEvent(evt, '(row off)', { suppressed: 'disabled' });
+    mappingPanel.markTriggered(evt, '— off');
+    return;
+  }
+  lastAutoId = d.template.id;
+  // Parent template → child variant: canonical (signature) or a fresh random one.
+  if (d.variantMode === 'canonical') variants.canonical(d.template);
+  else variants.newVariant(d.template);
+  debug.setAbletonEvent(evt, d.template.name);
+  mappingPanel.markTriggered(evt, d.template.name);
+  bridge.send(
+    wire('visual.activated', {
+      kind: evt.kind,
+      index: evt.index,
+      name: evt.name,
+      templateId: d.template.id,
+      variantMode: d.variantMode,
+      activatedAt: Date.now(),
+    }),
+  );
 }
 
 bus.on('scene.launched', (p) => {
@@ -188,7 +319,27 @@ bus.on('locator.crossed', (p) => {
   if (eventSource === 'live') respond({ kind: 'locator', index: p.index, name: p.name });
 });
 
+// Phase 5b — snapshot + mapping persistence from the bridge.
+bus.on('ableton.snapshot', (snap) => {
+  abletonMap = mergeSnapshot(abletonMap, snap);
+  mappingPanel.setMapping(abletonMap);
+  saveLocalMapping(abletonMap);
+});
+bus.on('mapping.result', (r) => {
+  if (r.op === 'list') {
+    mappingPanel.setNames(r.names ?? []);
+  } else if (r.op === 'load' && r.ok && r.mapping) {
+    abletonMap = r.mapping;
+    mappingPanel.setMapping(abletonMap);
+    saveLocalMapping(abletonMap);
+  } else if (r.op === 'save') {
+    if (r.names) mappingPanel.setNames(r.names);
+    if (!r.ok) console.warn('[lichtspiel] mapping save failed:', r.error);
+  }
+});
+
 bus.on('status', ({ connected }) => {
+  bridgeConnected = connected;
   debug.setConnected(connected);
   connEl.textContent = connected ? 'bridge connected' : 'browser-only';
   connEl.classList.toggle('live', connected);
@@ -290,6 +441,7 @@ installKeyboard({
   toggleLock: () => {
     locked = !locked;
     debug.setLock(locked);
+    mappingPanel.setLock(locked);
   },
   randomize: doRandomize,
   surprise: doSurprise,
@@ -305,14 +457,17 @@ installKeyboard({
   toggleDebug: () => debug.toggle(),
   toggleEmulator: () => twin.toggle(),
   toggleGestural: () => panel.toggle(),
+  toggleAbletonPanel: () => mappingPanel.toggle(),
   cycleRetrievalMode: () => {
     retrievalMode = retrievalMode === 'mapped' ? 'random' : 'mapped';
     debug.setRetrievalMode(retrievalMode);
+    mappingPanel.setFallback(retrievalMode);
     console.info(`[lichtspiel] retrieval mode → ${retrievalMode}`);
   },
   cycleEventSource: () => {
     eventSource = eventSource === 'live' ? 'simulated' : 'live';
     debug.setEventSource(eventSource);
+    mappingPanel.setSource(eventSource);
     console.info(`[lichtspiel] event source → ${eventSource}`);
   },
   simulateSceneLaunch: () => {
@@ -342,6 +497,6 @@ const first = registry.at(0);
 if (first) selectScene(first, true); // mount via the browser so the panel initializes
 console.info(
   `[lichtspiel] p5 runtime up — ${registry.size} templates. ` +
-    `Press 'd' HUD · 'g' monome twin · 'h' gestures · 'v/c/,/.' variants. ` +
+    `Press 'd' HUD · 'g' twin · 'h' gestures · 'a' Ableton mapping · 'v/c/,/.' variants. ` +
     `Bridge: ${wsUrl} (optional).`,
 );

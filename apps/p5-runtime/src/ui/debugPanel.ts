@@ -63,10 +63,16 @@ export class DebugPanel {
   setEventSource(s: EventSource): void {
     this.eventSource = s;
   }
-  /** Show the last Ableton-triggered auto-retrieval: event → chosen visual. */
-  setAbletonEvent(evt: AbletonEvent, visualName: string): void {
+  /** Show the last Ableton-triggered auto-retrieval: event → chosen visual (or
+   *  why it was suppressed — the performer's lock, or a disabled mapping row). */
+  setAbletonEvent(
+    evt: AbletonEvent,
+    visualName: string,
+    opts?: { suppressed?: 'lock' | 'disabled' },
+  ): void {
     const named = evt.name ? ` "${escape(evt.name)}"` : '';
-    this.abletonSummary = `${evt.kind} ${evt.index}${named} → ${escape(visualName)}`;
+    const tag = opts?.suppressed === 'lock' ? ' ⛔lock' : opts?.suppressed === 'disabled' ? ' ⛔off' : '';
+    this.abletonSummary = `${evt.kind} ${evt.index}${named} → ${escape(visualName)}${tag}`;
   }
 
   toggle(): void {

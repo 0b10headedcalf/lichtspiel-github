@@ -331,3 +331,163 @@ body {
   color: #9fb3c8;
   font-size: 10px;
 }
+
+/* ── Ableton mapping panel (scene/locator → animation; top-right, toggle `a`) ── */
+.ableton-panel {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 500px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: rgba(8, 10, 14, 0.86);
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  border-radius: 8px;
+  color: #cfe8ff;
+  font-size: 11px;
+  line-height: 1.4;
+  backdrop-filter: blur(6px);
+  z-index: 19;
+  pointer-events: auto;
+}
+.ableton-panel.collapsed {
+  overflow: hidden;
+}
+.ableton-panel.collapsed .ap-body {
+  display: none;
+}
+.ap-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.ap-caret {
+  color: #7fd0ff;
+  font-size: 9px;
+  transition: transform 0.12s ease;
+}
+.ableton-panel:not(.collapsed) .ap-caret {
+  transform: rotate(90deg);
+}
+.ap-title {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7fd0ff;
+}
+.ap-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: #9fb3c8;
+  font-size: 10px;
+  margin: 4px 0 2px;
+}
+.ap-meta b {
+  color: #cfe8ff;
+  font-weight: 600;
+}
+.ap-setname {
+  color: #8effc0;
+}
+.ap-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.ap-btn {
+  font: inherit;
+  font-size: 10px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(120, 200, 255, 0.25);
+  background: rgba(120, 200, 255, 0.08);
+  color: #cfe8ff;
+  cursor: pointer;
+}
+.ap-btn:hover {
+  background: rgba(120, 200, 255, 0.18);
+}
+.ap-prev {
+  padding: 1px 7px;
+}
+.ap-load {
+  font: inherit;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(120, 200, 255, 0.25);
+  background: rgba(8, 10, 14, 0.6);
+  color: #cfe8ff;
+}
+.ap-section-label {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 9px;
+  color: #7fd0ff;
+  margin: 8px 0 3px;
+}
+.ap-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ap-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #7e93a8;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 4px;
+  border-bottom: 1px solid rgba(120, 200, 255, 0.14);
+}
+.ap-table td {
+  padding: 2px 4px;
+  vertical-align: middle;
+}
+.ap-table tr.ap-active {
+  background: rgba(142, 255, 192, 0.14);
+}
+.ap-table tr.ap-stale {
+  opacity: 0.55;
+}
+.ap-name {
+  color: #cfe8ff;
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ap-idx {
+  color: #9fb3c8;
+  text-align: right;
+}
+.ap-last {
+  color: #8effc0;
+  font-size: 10px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ap-empty {
+  color: #7e93a8;
+  font-style: italic;
+  padding: 4px;
+}
+.ap-tpl,
+.ap-var {
+  font: inherit;
+  font-size: 10px;
+  max-width: 124px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(120, 200, 255, 0.2);
+  background: rgba(8, 10, 14, 0.6);
+  color: #cfe8ff;
+}
