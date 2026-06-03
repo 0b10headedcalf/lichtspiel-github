@@ -4,6 +4,7 @@
  * `payload`. This is the runtime source of truth for the WebSocket channel.
  */
 
+import type { AbletonMapping, AbletonSnapshot } from './abletonMapping.js';
 import type { LiveSessionState } from './liveSession.js';
 import type { DeviceAttached, DeviceDetached, MonomeEvent } from './monome.js';
 import type { MutationRequest, VisualRetrievalResult } from './retrieval.js';
@@ -58,6 +59,39 @@ export interface LedFramePayload {
   gridIntensity?: number;
 }
 
+/** p5 → bridge: request a fresh snapshot of the Live set's scenes/locators (Phase 5b). */
+export type AbletonSnapshotRequestPayload = Record<string, never>;
+
+/** p5 → bridge: a mapping-persistence op against the bridge's JSON store (Phase 5b). */
+export interface MappingRequestPayload {
+  op: 'load' | 'save' | 'list';
+  /** Mapping name (load/save). */
+  name?: string;
+  /** The mapping to persist (save). */
+  mapping?: AbletonMapping;
+}
+
+/** bridge → p5: the result of a mapping op. */
+export interface MappingResultPayload {
+  op: 'load' | 'save' | 'list';
+  ok: boolean;
+  name?: string;
+  mapping?: AbletonMapping;
+  names?: string[];
+  error?: string;
+}
+
+/** p5 → bridge: confirms a visual was activated (latency-metric groundwork, Phase 5b). */
+export interface VisualActivatedPayload {
+  kind: 'scene' | 'locator';
+  index: number;
+  name: string;
+  templateId: string;
+  variantMode: 'canonical' | 'random';
+  /** epoch ms when p5 activated the visual. */
+  activatedAt: number;
+}
+
 export type WireMessage =
   | { v: 1; ts: number; type: 'hello'; payload: HelloPayload }
   | { v: 1; ts: number; type: 'scene.select'; payload: SceneSelectPayload }
@@ -71,6 +105,11 @@ export type WireMessage =
   | { v: 1; ts: number; type: 'device.attached'; payload: DeviceAttached }
   | { v: 1; ts: number; type: 'device.detached'; payload: DeviceDetached }
   | { v: 1; ts: number; type: 'led.frame'; payload: LedFramePayload }
+  | { v: 1; ts: number; type: 'ableton.snapshotRequest'; payload: AbletonSnapshotRequestPayload }
+  | { v: 1; ts: number; type: 'ableton.snapshot'; payload: AbletonSnapshot }
+  | { v: 1; ts: number; type: 'mapping.request'; payload: MappingRequestPayload }
+  | { v: 1; ts: number; type: 'mapping.result'; payload: MappingResultPayload }
+  | { v: 1; ts: number; type: 'visual.activated'; payload: VisualActivatedPayload }
   | { v: 1; ts: number; type: 'status'; payload: StatusPayload };
 
 export type WireType = WireMessage['type'];

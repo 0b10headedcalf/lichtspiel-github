@@ -100,6 +100,10 @@ export class BridgeClient {
       this.bus.emit('device.attached', m.payload);
     } else if (isType(m, 'device.detached')) {
       this.bus.emit('device.detached', m.payload);
+    } else if (isType(m, 'ableton.snapshot')) {
+      this.bus.emit('ableton.snapshot', m.payload);
+    } else if (isType(m, 'mapping.result')) {
+      this.bus.emit('mapping.result', m.payload);
     }
   }
 

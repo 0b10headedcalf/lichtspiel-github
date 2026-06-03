@@ -5,6 +5,7 @@
  */
 
 import type {
+  AbletonSnapshot,
   ArcDeltaEvent,
   ArcKeyEvent,
   DeviceAttached,
@@ -12,6 +13,7 @@ import type {
   GridKeyEvent,
   LiveSessionState,
   LocatorCrossedPayload,
+  MappingResultPayload,
   MonomeSetup,
   SceneLaunchedPayload,
   StatusPayload,
@@ -46,6 +48,10 @@ export interface AppEvents {
   frame: { fps: number; params: VisualParamVector; templateId: string };
   /** Bridge/connection status changed. */
   status: Partial<StatusPayload> & { connected: boolean };
+  /** A fresh Ableton snapshot arrived from the bridge (Phase 5b). */
+  'ableton.snapshot': AbletonSnapshot;
+  /** Result of a mapping load/save/list op from the bridge (Phase 5b). */
+  'mapping.result': MappingResultPayload;
 }
 
 type Handler<T> = (payload: T) => void;

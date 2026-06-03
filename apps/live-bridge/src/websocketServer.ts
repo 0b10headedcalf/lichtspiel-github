@@ -7,7 +7,9 @@
 
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
+  type AbletonSnapshot,
   type LedFramePayload,
+  type MappingRequestPayload,
   type StatusPayload,
   type WireMessage,
   type WireRole,
@@ -16,6 +18,7 @@ import {
   wire,
 } from '@lichtspiel/schemas';
 import { logger } from './log.js';
+import type { MappingStore } from './mappingStore.js';
 import { validate } from './validate.js';
 
 interface Client {
@@ -31,6 +34,10 @@ export interface BridgeServerOptions {
   onStatusChange?: (status: StatusPayload) => void;
   /** Sink for outbound LED frames (Phase 4: the serialosc layer flushes them). */
   onLedFrame?: (frame: LedFramePayload) => void;
+  /** Provide a fresh Ableton snapshot on request (Phase 5b). */
+  snapshot?: () => Promise<AbletonSnapshot>;
+  /** Persist / list scene-locator mappings as JSON (Phase 5b). */
+  mappingStore?: MappingStore;
 }
 
 export class BridgeServer {
@@ -41,6 +48,8 @@ export class BridgeServer {
   private monomeConnected = false;
   /** Current attached monome devices, keyed by id — replayed to new p5 clients. */
   private readonly attachedDevices = new Map<string, WireMessage>();
+  /** Last Ableton snapshot, replayed to a freshly-connected p5 (Phase 5b). */
+  private lastSnapshot: WireMessage | null = null;
   private readonly opts: BridgeServerOptions;
 
   constructor(opts: BridgeServerOptions) {
@@ -98,11 +107,72 @@ export class BridgeServer {
       // one-shot event at discovery, missed by clients that connect later.
       if (client.role === 'p5') {
         for (const dev of this.attachedDevices.values()) this.sendTo(client.ws, dev);
+        if (this.lastSnapshot) this.sendTo(client.ws, this.lastSnapshot);
       }
       this.emitStatus();
       return;
     }
+    if (isType(m, 'ableton.snapshotRequest')) {
+      void this.handleSnapshotRequest();
+      return;
+    }
+    if (isType(m, 'mapping.request')) {
+      this.handleMappingRequest(client, m.payload);
+      return;
+    }
     this.routeMessage(m, `${client.role}#${client.id}`);
+  }
+
+  /** Snapshot the Live set (or fixture) and broadcast it to p5 (Phase 5b). */
+  private async handleSnapshotRequest(): Promise<void> {
+    if (!this.opts.snapshot) {
+      logger.warn('snapshot requested but no provider configured');
+      return;
+    }
+    try {
+      const snap = await this.opts.snapshot();
+      const msg = wire('ableton.snapshot', snap);
+      this.lastSnapshot = msg;
+      this.broadcast(['p5'], msg);
+    } catch (err) {
+      logger.warn('snapshot failed', { error: String(err) });
+    }
+  }
+
+  /** Persist / load / list mappings via the JSON store; reply to the requester. */
+  private handleMappingRequest(client: Client, p: MappingRequestPayload): void {
+    const store = this.opts.mappingStore;
+    if (!store) {
+      this.sendTo(client.ws, wire('mapping.result', { op: p.op, ok: false, error: 'no mapping store' }));
+      return;
+    }
+    if (p.op === 'list') {
+      this.sendTo(client.ws, wire('mapping.result', { op: 'list', ok: true, names: store.list() }));
+      return;
+    }
+    const name = p.name ?? '';
+    if (p.op === 'load') {
+      const r = store.load(name);
+      this.sendTo(
+        client.ws,
+        r.ok
+          ? wire('mapping.result', { op: 'load', ok: true, name, mapping: r.mapping })
+          : wire('mapping.result', { op: 'load', ok: false, name, error: r.error }),
+      );
+      return;
+    }
+    // save
+    if (!p.mapping) {
+      this.sendTo(client.ws, wire('mapping.result', { op: 'save', ok: false, name, error: 'no mapping in request' }));
+      return;
+    }
+    const r = store.save(name, p.mapping);
+    this.sendTo(
+      client.ws,
+      r.ok
+        ? wire('mapping.result', { op: 'save', ok: true, name, names: store.list() })
+        : wire('mapping.result', { op: 'save', ok: false, name, error: r.error }),
+    );
   }
 
   /** Route a wire message from a non-WebSocket source (e.g. OSC from Max, monome). */
@@ -162,6 +232,16 @@ export class BridgeServer {
       // on to any Max client that wants to mirror it.
       this.opts.onLedFrame?.(m.payload);
       this.broadcast(['max'], m);
+      return;
+    }
+
+    if (isType(m, 'visual.activated')) {
+      // p5 confirms it activated a visual (latency-metric groundwork, Phase 5b).
+      const p = m.payload;
+      logger.info('visual.activated', {
+        source: src,
+        summary: `${p.kind} ${p.index} "${p.name}" → ${p.templateId} (${p.variantMode})`,
+      });
       return;
     }
 

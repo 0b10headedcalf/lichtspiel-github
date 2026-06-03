@@ -5,16 +5,30 @@
  */
 
 import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { wire } from '@lichtspiel/schemas';
 import { BridgeServer } from './websocketServer.js';
 import { OscRouter } from './oscRouter.js';
 import { SerialOsc } from './serialosc.js';
+import { MappingStore } from './mappingStore.js';
+import { snapshotAbleton } from './abletonSnapshot.js';
 import { logger } from './log.js';
 
 const host = process.env['LICHTSPIEL_BIND_HOST'] ?? '127.0.0.1';
 const wsPort = Number(process.env['LICHTSPIEL_BRIDGE_WS_PORT'] ?? 7890);
 const httpPort = Number(process.env['LICHTSPIEL_BRIDGE_HTTP_PORT'] ?? 7891);
 const prefix = process.env['LICHTSPIEL_OSC_PREFIX'] ?? '/lichtspiel';
+
+// Phase 5b — Ableton snapshot + mapping persistence. The store owns the
+// authoritative JSON files (config/ableton-mappings/*.json); the snapshot reads
+// the ableton-mcp Remote Script socket (or the ADE_Sleuth fixture when Ableton is
+// unreachable / LICHTSPIEL_SNAPSHOT_FIXTURE=1).
+const mappingsDir =
+  process.env['LICHTSPIEL_MAPPINGS_DIR'] ??
+  fileURLToPath(new URL('../../../config/ableton-mappings', import.meta.url));
+const mappingStore = new MappingStore(mappingsDir);
+const abletonPort = Number(process.env['LICHTSPIEL_ABLETON_PORT'] ?? 9877);
+const forceFixture = process.env['LICHTSPIEL_SNAPSHOT_FIXTURE'] === '1';
 
 // `serial` is wired into the hub's LED sink below; declared first to break the
 // hub ⇄ serialosc reference cycle (the closure runs only after assignment).
@@ -25,6 +39,8 @@ const server = new BridgeServer({
   port: wsPort,
   // led.frame from p5 (templates + digital twin) → real monome LEDs.
   onLedFrame: (frame) => serial?.flushLeds(frame),
+  snapshot: () => snapshotAbleton({ abletonPort, forceFixture }),
+  mappingStore,
 });
 server.start();
 
