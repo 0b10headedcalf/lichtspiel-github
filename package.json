@@ -12,6 +12,7 @@
     "dev": "pnpm -r --parallel --reporter append-only dev",
     "dev:p5": "pnpm --filter @lichtspiel/p5-runtime dev",
     "dev:bridge": "pnpm --filter @lichtspiel/live-bridge dev",
+    "dev:feeder": "node apps/live-bridge/demo-feeder.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r --no-bail typecheck",
     "test": "pnpm -r test",

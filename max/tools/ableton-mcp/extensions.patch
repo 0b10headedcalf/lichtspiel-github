@@ -1,0 +1,222 @@
+diff --git a/AbletonMCP_Remote_Script/__init__.py b/AbletonMCP_Remote_Script/__init__.py
+index 45ede99..974fc02 100644
+--- a/AbletonMCP_Remote_Script/__init__.py
++++ b/AbletonMCP_Remote_Script/__init__.py
+@@ -222,14 +222,17 @@ class AbletonMCP(ControlSurface):
+             # Route the command to the appropriate handler
+             if command_type == "get_session_info":
+                 response["result"] = self._get_session_info()
++            elif command_type == "get_scene_info":
++                response["result"] = self._get_scene_info()
+             elif command_type == "get_track_info":
+                 track_index = params.get("track_index", 0)
+                 response["result"] = self._get_track_info(track_index)
+             # Commands that modify Live's state should be scheduled on the main thread
+-            elif command_type in ["create_midi_track", "set_track_name", 
+-                                 "create_clip", "add_notes_to_clip", "set_clip_name", 
++            elif command_type in ["create_midi_track", "set_track_name",
++                                 "create_clip", "add_notes_to_clip", "set_clip_name",
+                                  "set_tempo", "fire_clip", "stop_clip",
+-                                 "start_playback", "stop_playback", "load_browser_item"]:
++                                 "start_playback", "stop_playback", "load_browser_item",
++                                 "fire_scene", "set_song_position", "back_to_arrangement"]:
+                 # Use a thread-safe approach with a response queue
+                 response_queue = queue.Queue()
+                 
+@@ -274,6 +277,14 @@ class AbletonMCP(ControlSurface):
+                             result = self._start_playback()
+                         elif command_type == "stop_playback":
+                             result = self._stop_playback()
++                        elif command_type == "fire_scene":
++                            scene_index = params.get("scene_index", 0)
++                            result = self._fire_scene(scene_index)
++                        elif command_type == "set_song_position":
++                            time_beats = params.get("time", 0.0)
++                            result = self._set_song_position(time_beats)
++                        elif command_type == "back_to_arrangement":
++                            result = self._back_to_arrangement()
+                         elif command_type == "load_instrument_or_effect":
+                             track_index = params.get("track_index", 0)
+                             uri = params.get("uri", "")
+@@ -628,7 +639,7 @@ class AbletonMCP(ControlSurface):
+         """Stop playing the session"""
+         try:
+             self._song.stop_playing()
+-            
++
+             result = {
+                 "playing": self._song.is_playing
+             }
+@@ -636,7 +647,87 @@ class AbletonMCP(ControlSurface):
+         except Exception as e:
+             self.log_message("Error stopping playback: " + str(e))
+             raise
+-    
++
++    def _fire_scene(self, scene_index):
++        """Launch a Session-view scene (fires all its clips)"""
++        try:
++            if scene_index < 0 or scene_index >= len(self._song.scenes):
++                raise IndexError("Scene index out of range")
++            scene = self._song.scenes[scene_index]
++            scene.fire()
++            return {"fired": True, "scene_index": scene_index, "name": scene.name}
++        except Exception as e:
++            self.log_message("Error firing scene: " + str(e))
++            raise
++
++    def _set_song_position(self, time_beats):
++        """Move the Arrangement playhead to a beat time (for locator-crossing tests)"""
++        try:
++            self._song.current_song_time = float(time_beats)
++            return {"current_song_time": self._song.current_song_time}
++        except Exception as e:
++            self.log_message("Error setting song position: " + str(e))
++            raise
++
++    def _back_to_arrangement(self):
++        """Clear the Session override so the Arrangement plays (the Back to Arrangement button)"""
++        try:
++            self._song.back_to_arranger = 0
++            return {"back_to_arranger": self._song.back_to_arranger}
++        except Exception as e:
++            self.log_message("Error back_to_arrangement: " + str(e))
++            raise
++
++    def _get_scene_info(self):
++        """Session scenes + Arrangement cue points (locators) + transport state.
++        Read-only LOM introspection for Phase 5a retrieval testing."""
++        try:
++            scenes = []
++            for i, s in enumerate(self._song.scenes):
++                scenes.append({
++                    "index": i,
++                    "name": s.name,
++                    "is_triggered": s.is_triggered,
++                    "is_empty": s.is_empty
++                })
++            cue_points = []
++            for i, c in enumerate(self._song.cue_points):
++                cue_points.append({"index": i, "name": c.name, "time": c.time})
++            triggered = -1
++            for i, s in enumerate(self._song.scenes):
++                if s.is_triggered:
++                    triggered = i
++                    break
++            # Playing Session row: the first track with a playing clip slot (in a
++            # launched scene every track shares that row). Cheap early-exit scan in
++            # Python, so the feeder gets the scene in one get_scene_info call.
++            playing_scene = -1
++            try:
++                for tr in self._song.tracks:
++                    try:
++                        psi = tr.playing_slot_index
++                    except Exception:
++                        psi = -1
++                    if psi is not None and psi >= 0:
++                        playing_scene = psi
++                        break
++            except Exception:
++                playing_scene = -1
++            return {
++                "is_playing": self._song.is_playing,
++                "current_song_time": self._song.current_song_time,
++                "back_to_arranger": self._song.back_to_arranger,
++                "tempo": self._song.tempo,
++                "scene_count": len(self._song.scenes),
++                "triggered_scene_index": triggered,
++                "playing_scene": playing_scene,
++                "scenes": scenes,
++                "cue_points": cue_points
++            }
++        except Exception as e:
++            self.log_message("Error getting scene info: " + str(e))
++            raise
++
+     def _get_browser_item(self, uri, path):
+         """Get a browser item by URI or path"""
+         try:
+diff --git a/MCP_Server/server.py b/MCP_Server/server.py
+index fdddb47..0e74ad7 100644
+--- a/MCP_Server/server.py
++++ b/MCP_Server/server.py
+@@ -105,7 +105,8 @@ class AbletonConnection:
+             "create_midi_track", "create_audio_track", "set_track_name",
+             "create_clip", "add_notes_to_clip", "set_clip_name",
+             "set_tempo", "fire_clip", "stop_clip", "set_device_parameter",
+-            "start_playback", "stop_playback", "load_instrument_or_effect"
++            "start_playback", "stop_playback", "load_instrument_or_effect",
++            "fire_scene", "set_song_position", "back_to_arrangement"
+         ]
+         
+         try:
+@@ -498,6 +499,69 @@ def stop_playback(ctx: Context) -> str:
+         logger.error(f"Error stopping playback: {str(e)}")
+         return f"Error stopping playback: {str(e)}"
+ 
++@mcp.tool()
++def fire_scene(ctx: Context, scene_index: int) -> str:
++    """
++    Launch a Session-view scene by index (fires every clip in that scene row).
++    Drives the Lichtspiel scene-launch retrieval trigger.
++
++    Parameters:
++    - scene_index: The 0-based index of the scene to launch
++    """
++    try:
++        ableton = get_ableton_connection()
++        result = ableton.send_command("fire_scene", {"scene_index": scene_index})
++        return f"Launched scene {scene_index}: {result.get('name', '')}"
++    except Exception as e:
++        logger.error(f"Error firing scene: {str(e)}")
++        return f"Error firing scene: {str(e)}"
++
++@mcp.tool()
++def set_song_position(ctx: Context, time: float) -> str:
++    """
++    Move the Arrangement playhead to a beat position. Combined with start_playback,
++    this drives Lichtspiel locator-crossing tests (jump just before a locator, play).
++
++    Parameters:
++    - time: Song time in beats
++    """
++    try:
++        ableton = get_ableton_connection()
++        result = ableton.send_command("set_song_position", {"time": time})
++        return f"Set song position to {result.get('current_song_time', time)} beats"
++    except Exception as e:
++        logger.error(f"Error setting song position: {str(e)}")
++        return f"Error setting song position: {str(e)}"
++
++@mcp.tool()
++def back_to_arrangement(ctx: Context) -> str:
++    """
++    Clear the Session-clip override so Live plays the Arrangement (the "Back to
++    Arrangement" button). Needed to leave Session mode for locator testing.
++    """
++    try:
++        ableton = get_ableton_connection()
++        result = ableton.send_command("back_to_arrangement")
++        return f"Back to Arrangement (back_to_arranger={result.get('back_to_arranger')})"
++    except Exception as e:
++        logger.error(f"Error back_to_arrangement: {str(e)}")
++        return f"Error back_to_arrangement: {str(e)}"
++
++@mcp.tool()
++def get_scene_info(ctx: Context) -> str:
++    """
++    Get Session scenes (name, is_triggered, is_empty), Arrangement cue points
++    (locators: index, name, time), and transport state (is_playing,
++    current_song_time, back_to_arranger, tempo). Read-only LOM introspection.
++    """
++    try:
++        ableton = get_ableton_connection()
++        result = ableton.send_command("get_scene_info")
++        return json.dumps(result, indent=2)
++    except Exception as e:
++        logger.error(f"Error getting scene info: {str(e)}")
++        return f"Error getting scene info: {str(e)}"
++
+ @mcp.tool()
+ def get_browser_tree(ctx: Context, category_type: str = "all") -> str:
+     """

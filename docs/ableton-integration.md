@@ -168,3 +168,63 @@ detection lags ~1–2 s** and can make Live itself feel laggy. Notes for the nex
 - **Scene detection assumes "clean" scenes** (every track in a launched scene shares
   one row — true for ADE_Sleuth). For sets where a scene spans multiple rows, switch
   `detectScene` back to a dominant-row tally.
+
+## Trigger path: native M4L vs feeder bypass (architecture — key for future iterations)
+
+Two ways to get Ableton scene/locator events to the bridge; both end at the same wire
+messages (`scene.launched` / `locator.crossed`) → p5. Pick per deploy:
+
+**A. Native M4L device** — `max/js/live_api_helpers.js` (the committed runtime path).
+The device polls the LOM in Max's `js` and emits OSC on its 2nd outlet. **Self-contained**:
+ships in the `.amxd`, only needs the bridge — no external process, no ableton-mcp. BUT
+**laggy** on a heavy set (Max's legacy `js` LiveAPI + the per-tick playing-row scan) and
+**fragile** (the 2nd-outlet cord drops on an Ableton restart unless saved; ES5/ASCII-only;
+autowatch lags). Scene-launch + locator both verified working here (laggy).
+
+**B. Feeder bypass** — `apps/live-bridge/demo-feeder.mjs` (run via `pnpm dev:feeder`). A Node
+process polls Ableton via the **ableton-mcp Remote
+Script socket (9877)** — `get_scene_info` returns transport + cue points + `back_to_arranger`
++ `playing_scene` in one call — and fires the wire messages to the bridge (7890), mirroring
+the M4L's Session/Arrangement gate. **Less laggy** (Node engine + one light read vs Max's
+slow per-tick scan) and **robust** (no Max cord/ES5/autowatch fragility; trivial to iterate).
+BUT it makes ableton-mcp's Remote Script a **runtime dependency** (the plan treated it as a
+testing accelerator only) and adds an external process to launch. (Uses the `playing_scene`
+field added to the Remote Script's `get_scene_info` — loads on the next Ableton restart.)
+
+**C. Native event-driven** (the ideal, not built). Rewrite the M4L `js` to use LiveAPI
+**observers** (callbacks on change, no polling) → near-instant, self-contained, no
+ableton-mcp. Best long-term — keeps A's self-containment without the lag. The planned refinement.
+
+**Decision rule (per the user, 2026-06-03).** For now + iterations, prefer **B (the feeder)**
+if it tests less-laggy for *both* modes — fastest + most robust way to keep developing. KEEP
+**A** (the device + recipe) and **C** (the observer plan) documented as the **native,
+self-contained, ableton-mcp-free** path to return to for a production/installation deploy that
+must not depend on ableton-mcp running. Don't delete A — both stay; switch the *active* path
+per context.
+
+**Eval (2026-06-03, ADE_Sleuth — feeder is the better working path for both).** The feeder
+handles BOTH modes reliably, cleanly separated. **Locators** snappy (~feeder poll, ~300 ms).
+**Scene-launch** fires at the **launch-quantization bar boundary** — verified: the playing-row
+flip lands on a bar (song_time ~12.0), so the ~1-2 s is **Live's launch quantization, NOT
+detection lag** (the visual swaps in sync with the scene's audio; lower the set's global launch
+quantization for snappier scene swaps). The M4L's *locator* lag was metro-starvation, which the
+feeder avoids; scene timing is quantization-bound either way. -> Adopt the feeder as the working
+trigger path; keep A + C for a self-contained deploy.
+
+**Lag — TWO distinct causes (don't conflate):**
+1. **Scene-launch latency (~1–2 s) is mostly Live's LAUNCH QUANTIZATION** — Session clips fire on
+   the next bar, so the visual correctly swaps *in sync with the audio*. It's a Live transport
+   setting (global launch-quantization dropdown → set 1/4 or None for snappier scene swaps), **not
+   a code problem.** (Should have been checked first — noted.) Locator crossings have no
+   quantization, so they're as snappy as the poll.
+2. **The general polling lag IS a code/perf issue** (the M4L's was metro-starvation; the feeder
+   cuts it a lot, but ~300 ms poll + `get_scene_info` cost remain). Lower it via a faster poll, a
+   lighter `get_scene_info`, or the observer rewrite (C). Still some residual lag — "good for now,"
+   target lower.
+
+**Future — per-trigger animation assignment (fixed OR random per locator/scene).** Observed: in
+Arrangement, replaying a section reloads the *same* p5 sketch — that's `mapped` mode **by design**
+(deterministic template per locator/scene index + a fresh structural variant); `random` mode
+(key `m`) picks a different template each time. Planned: a **curatable locator/scene →
+{fixed template | random}** table (extends `MAPPED_TABLE` in `apps/p5-runtime/src/live/abletonRetrieval.ts`)
+so the performer pins each scene/locator to a chosen animation or "surprise me." Key for future iterations.
