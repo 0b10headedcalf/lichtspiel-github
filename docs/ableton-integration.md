@@ -11,6 +11,14 @@ immediately):
 Both are deliberately *basic* communication — a foundation to iterate on
 (name-based retrieval, richer rules, constrained generation come later).
 
+> **▶ Phase 5b builds the mapping UI on this foundation** — snapshot a set's named
+> scenes/locators, assign each a **Template** (fixed/random) + **Variant**
+> (canonical/random), save/load (bridge-owned JSON), and have events drive the plan
+> (the lock still wins). The resolver `resolveActivation()` extends `pickTemplate`;
+> un-mapped sections fall back to the Phase-5a behavior described here. Snapshotting
+> is a deliberate manual action (not polling), and **MCP stays out of the runtime
+> path** (authoring/testing only). Full doc: **`docs/ableton-mapping-ui.md`**.
+
 ## Signal path
 
 ```

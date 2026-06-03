@@ -276,6 +276,57 @@ monome-playable (idioms stay live), hot-swapping per song section.
 - 🔭 Deferred: name-based semantic retrieval as a 3rd mode (`ml-service/retrieve.py`
   already exists); richer Ableton rules; eventually constrained generation.
 
+### Phase 5b — scene/locator → animation mapping UI ✅ DONE (in-Live verified) · ⚠️ latency track NEXT
+
+Pre-plan/perform: snapshot a set's named scenes + locators, assign each a **Template**
+(fixed/random) + **Variant** policy (canonical/random), save/load, and have events
+drive the plan — monome stays live, the lock still wins. This was the **mapping-first**
+slice (**Goal B** of the original 5b brief). Docs: `docs/ableton-mapping-ui.md`. Committed
+in 4 parts (A schema+resolver · B panel · C bridge · D docs) + pushed.
+
+- ✅ **Schema + resolver** (pure, tested): `packages/schemas/src/abletonMapping.ts`
+  (`AbletonMapping`/`MappingRow` + JSON schema + `makeDefaultRow` + `ADE_SLEUTH_SNAPSHOT`);
+  `live/abletonRetrieval.ts` `resolveActivation()` (name-first match; disabled→suppressed;
+  no-row→Phase-5a fallback); `live/abletonMappings.ts` `mergeSnapshot()` (edit-preserving,
+  stale-flagging). `scripts/mapping-smoke.ts` = 21 checks.
+- ✅ **p5 panel** (`ui/abletonMappingPanel.ts`, toggle `a`): Arrangement + Session tables,
+  Template + Variant dropdowns, ▶ preview, last-triggered, lock-suppressed HUD readout,
+  localStorage cache. `main.ts` `respond()` rewritten to the resolver + variant policy.
+- ✅ **Bridge persistence + snapshot**: `mappingStore.ts` (JSON under
+  `config/ableton-mappings/`, ajv-validated, traversal-safe) + `abletonSnapshot.ts`
+  (9877 `get_scene_info`, ADE_Sleuth fixture fallback); new wire types
+  (`ableton.snapshot[Request]`, `mapping.request/result`, `visual.activated`); snapshot
+  replay-on-connect. `test:mapping` = store round-trip + save/load/snapshot over WS.
+- ✅ **In-Live verified (2026-06-04, ADE_Sleuth):** the **feeder** drives BOTH locator
+  crossings (Drop/buildup/next/hats back/END) and scene launches (Scene1) → p5 hot-swaps,
+  each acked by `visual.activated`. **The M4L 2nd-outlet path was dead** (its cord dropped on
+  the restart — known-fragile); the feeder bypasses it. **Runtime = 3 procs:** `dev:bridge`
+  + `dev:p5` + **`dev:feeder`** (+ AbletonMCP Control Surface on, for the 9877 snapshot/poll).
+
+**▶ RESUME HERE — Phase 5b latency track ⬜ (Goal A of the original brief; the user's next ask)**
+
+The user noted **residual latency**. Two causes, don't conflate: scene-launch **quantization**
+(Live fires clips on the bar — a transport setting, not a bug; lower global launch-quant for
+snappier) vs the **feeder poll** (~300 ms + `get_scene_info` cost — the real code/perf target).
+Make the trigger path low-latency + sturdier; ranked, least-risky first:
+
+1. ⬜ **Tighten the feeder** — split `apps/live-bridge/demo-feeder.mjs` into a fast trigger loop
+   (transport / playing-row / `back_to_arranger`, ~25–50 ms) + a slow snapshot loop (cues/scenes,
+   manual/occasional). Measure before/after. Likely the fastest win.
+2. ⬜ **Thin Remote Script direct-event sender** — a Lichtspiel runtime Remote Script that *observes*
+   scene/locator changes (listeners, not polling) and emits tiny localhost OSC/UDP straight to the
+   bridge, bypassing the MCP server. Lower latency + self-contained.
+3. ⬜ **AbletonOSC adapter** (evaluate) — `ideoforms/AbletonOSC` `start_listen` as an alt event source
+   → adapter into `scene.launched`/`locator.crossed`. Toggle-able, no disruption to the other paths.
+4. ⬜ **Native M4L observer rewrite** — replace the dead polling 2nd-outlet path with LiveAPI
+   observers (the self-contained, ableton-mcp-free deploy path; keep as a fallback).
+- ⬜ **Measurement** — turn the `visual.activated` ack + `max/tools/verify-phase5a.mjs` into a metrics
+  harness: median/p95 event→p5 latency, missed/dup triggers, source tag. Targets: locator p95
+  < 150 ms; 0 misses / 100. Refs: `docs/ableton-integration.md` "Trigger path" + the dossiers
+  `context_docs/deep-research-report (4)/(5).md`. A `docs/phase5b-latency.md` write-up lands with it.
+- 🔭 Also still open in Phase 5: **name-based semantic retrieval** as a 3rd mode
+  (`ml-service/retrieve.py` exists) + richer Ableton rules. ML/codegen = Phases 6–9.
+
 ## Phase 6 — MIDI/audio descriptors ⬜
 
 Musical structure influences visuals.
