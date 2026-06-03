@@ -13,6 +13,7 @@
  *  - `random`  — a random template, avoiding an immediate repeat of `lastId`.
  */
 
+import type { AbletonMapping, MappingRow, VariantMode } from '@lichtspiel/schemas';
 import type { TemplateRegistry } from '../templateRegistry.js';
 import type { VisualTemplate } from '../visualTemplate.js';
 
@@ -76,4 +77,61 @@ export function pickTemplate(
   const mappedId = (evt.name ? table[evt.name.toLowerCase()] : undefined) ?? table[String(evt.index)];
   const mapped = mappedId ? registry.get(mappedId) : undefined;
   return mapped ?? registry.at(wrapIndex(evt.index, registry.size));
+}
+
+/**
+ * A scene/locator-launch activation decision (Phase 5b). The resolver consults
+ * the saved mapping FIRST: a matching enabled row pins the template + variant
+ * policy; a disabled row *suppresses* the swap (the event was received, but the
+ * performer turned that row off); no matching row (or no mapping) falls back to
+ * the Phase-5a global behavior so nothing regresses.
+ */
+export type Activation =
+  | { kind: 'activate'; template: VisualTemplate; variantMode: VariantMode; source: 'mapped' | 'fallback' }
+  | { kind: 'suppressed'; reason: 'disabled' }
+  | { kind: 'none' };
+
+/** Find the row an event maps to: name (case-insensitive) first, then index. */
+function findRow(rows: readonly MappingRow[], evt: AbletonEvent): MappingRow | undefined {
+  const byName = evt.name
+    ? rows.find((r) => r.name.toLowerCase() === evt.name.toLowerCase())
+    : undefined;
+  return byName ?? rows.find((r) => r.index === evt.index);
+}
+
+/**
+ * Resolve what a scene/locator launch should activate, given the saved mapping.
+ * Parent (template) → child (variant): a `fixed` row loads its `templateId`
+ * (gracefully falling back to a random template if the id is missing/unknown);
+ * a `random` row picks a fresh template (avoiding an immediate repeat of
+ * `lastId`). With no matching row we defer to `pickTemplate(fallbackMode)` + a
+ * random variant — exactly the Phase-5a behavior, so the feature degrades
+ * cleanly. `rnd` is injectable for deterministic tests.
+ */
+export function resolveActivation(
+  evt: AbletonEvent,
+  mapping: AbletonMapping | null,
+  fallbackMode: RetrievalMode,
+  registry: TemplateRegistry,
+  lastId?: string,
+  rnd: () => number = Math.random,
+): Activation {
+  if (registry.size === 0) return { kind: 'none' };
+  const rows = mapping
+    ? evt.kind === 'scene'
+      ? mapping.session.scenes
+      : mapping.arrangement.locators
+    : [];
+  const row = findRow(rows, evt);
+  if (row) {
+    if (!row.enabled) return { kind: 'suppressed', reason: 'disabled' };
+    const fixed =
+      row.templateMode === 'fixed' && row.templateId ? registry.get(row.templateId) : undefined;
+    const template = fixed ?? pickRandom(registry, lastId, rnd);
+    if (!template) return { kind: 'none' };
+    return { kind: 'activate', template, variantMode: row.variantMode, source: 'mapped' };
+  }
+  const template = pickTemplate(evt, fallbackMode, registry, lastId, MAPPED_TABLE, rnd);
+  if (!template) return { kind: 'none' };
+  return { kind: 'activate', template, variantMode: 'random', source: 'fallback' };
 }

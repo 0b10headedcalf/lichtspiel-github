@@ -56,6 +56,31 @@ const examples = [
     'MutationRequest.schema.json',
     { type: 'mutation_request', version: '0.1.0', amount: 0.3, axes: ['palette', 'motion'] },
   ],
+  [
+    'AbletonMapping.schema.json',
+    {
+      version: '0.1.0',
+      setName: 'ADE_Sleuth',
+      updatedAt: '2026-06-03T00:00:00.000Z',
+      session: {
+        scenes: [
+          {
+            index: 0,
+            name: 'Scene1',
+            enabled: true,
+            templateMode: 'fixed',
+            templateId: 'lichtspielOpus',
+            variantMode: 'random',
+          },
+        ],
+      },
+      arrangement: {
+        locators: [
+          { index: 0, name: 'Intro', time: 0, enabled: true, templateMode: 'random', variantMode: 'canonical' },
+        ],
+      },
+    },
+  ],
 ];
 
 for (const [file, payload] of examples) {

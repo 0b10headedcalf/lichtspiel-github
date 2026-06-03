@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lichtspiel.local/schemas/AbletonMapping.schema.json",
+  "title": "AbletonMapping",
+  "description": "Performer's saved Session-scene / Arrangement-locator → template + variant plan (Phase 5b).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "setName", "updatedAt", "session", "arrangement"],
+  "properties": {
+    "version": { "const": "0.1.0" },
+    "setName": { "type": "string" },
+    "updatedAt": { "type": "string" },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenes"],
+      "properties": {
+        "scenes": { "type": "array", "items": { "$ref": "#/$defs/row" } }
+      }
+    },
+    "arrangement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locators"],
+      "properties": {
+        "locators": { "type": "array", "items": { "$ref": "#/$defs/row" } }
+      }
+    }
+  },
+  "$defs": {
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "name", "enabled", "templateMode", "variantMode"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "time": { "type": "number", "minimum": 0 },
+        "enabled": { "type": "boolean" },
+        "templateMode": { "enum": ["fixed", "random"] },
+        "templateId": { "type": "string" },
+        "variantMode": { "enum": ["canonical", "random"] },
+        "stale": { "type": "boolean" }
+      }
+    }
+  }
+}

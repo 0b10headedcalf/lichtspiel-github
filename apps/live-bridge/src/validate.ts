@@ -20,6 +20,7 @@ export const validators = {
   VisualParamVector: compile('VisualParamVector'),
   MonomeEvent: compile('MonomeEvent'),
   MutationRequest: compile('MutationRequest'),
+  AbletonMapping: compile('AbletonMapping'),
 } as const;
 
 export interface ValidationResult {

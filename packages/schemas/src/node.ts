@@ -17,6 +17,7 @@ export const SCHEMA_FILES = {
   VisualTemplate: 'VisualTemplate.schema.json',
   MonomeEvent: 'MonomeEvent.schema.json',
   MutationRequest: 'MutationRequest.schema.json',
+  AbletonMapping: 'AbletonMapping.schema.json',
 } as const;
 
 export type SchemaName = keyof typeof SCHEMA_FILES;
