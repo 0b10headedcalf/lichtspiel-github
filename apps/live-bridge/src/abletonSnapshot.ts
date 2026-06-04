@@ -8,8 +8,13 @@
  */
 
 import net from 'node:net';
-import { type AbletonSnapshot, ADE_SLEUTH_SNAPSHOT } from '@lichtspiel/schemas';
+import { type AbletonSnapshot, ADE_SLEUTH_SNAPSHOT, signatureOf } from '@lichtspiel/schemas';
 import { logger } from './log.js';
+
+/** Stamp a snapshot with its structural fingerprint (the set-awareness key). */
+function stamped(snap: AbletonSnapshot): AbletonSnapshot {
+  return { ...snap, signature: signatureOf(snap) };
+}
 
 export interface SnapshotOptions {
   /** TCP port of the ableton-mcp Remote Script socket (default 9877). */
@@ -60,7 +65,7 @@ interface RawCue {
 export async function snapshotAbleton(opts: SnapshotOptions): Promise<AbletonSnapshot> {
   if (opts.forceFixture) {
     logger.info('snapshot: fixture (forced)');
-    return ADE_SLEUTH_SNAPSHOT;
+    return stamped(ADE_SLEUTH_SNAPSHOT);
   }
   try {
     const resp = await abletonGet('get_scene_info', opts.abletonPort);
@@ -81,12 +86,12 @@ export async function snapshotAbleton(opts: SnapshotOptions): Promise<AbletonSna
         logger.info('ableton snapshot', {
           summary: `${scenes.length} scenes · ${locators.length} locators · ${setName}`,
         });
-        return { setName, scenes, locators };
+        return stamped({ setName, scenes, locators });
       }
     }
     logger.warn('snapshot: get_scene_info empty/odd — using fixture');
   } catch (err) {
     logger.warn('snapshot: Ableton unreachable — using fixture', { error: String(err) });
   }
-  return ADE_SLEUTH_SNAPSHOT;
+  return stamped(ADE_SLEUTH_SNAPSHOT);
 }

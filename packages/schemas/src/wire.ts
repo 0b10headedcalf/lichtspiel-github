@@ -62,22 +62,33 @@ export interface LedFramePayload {
 /** p5 → bridge: request a fresh snapshot of the Live set's scenes/locators (Phase 5b). */
 export type AbletonSnapshotRequestPayload = Record<string, never>;
 
+/** Set-aware preset metadata (bridge → p5) — feeds the panel's Load list. */
+export interface MappingPresetInfo {
+  name: string;
+  /** The set this preset was built for (so the panel can flag matches). */
+  setSignature?: string;
+  setName?: string;
+}
+
 /** p5 → bridge: a mapping-persistence op against the bridge's JSON store (Phase 5b). */
 export interface MappingRequestPayload {
-  op: 'load' | 'save' | 'list';
-  /** Mapping name (load/save). */
+  op: 'load' | 'save' | 'list' | 'rename' | 'delete';
+  /** Mapping name (load/save/rename/delete — the source name for rename). */
   name?: string;
+  /** New name (rename only). */
+  newName?: string;
   /** The mapping to persist (save). */
   mapping?: AbletonMapping;
 }
 
 /** bridge → p5: the result of a mapping op. */
 export interface MappingResultPayload {
-  op: 'load' | 'save' | 'list';
+  op: 'load' | 'save' | 'list' | 'rename' | 'delete';
   ok: boolean;
   name?: string;
   mapping?: AbletonMapping;
-  names?: string[];
+  /** Set-aware preset list (list/save/rename/delete replies). */
+  presets?: MappingPresetInfo[];
   error?: string;
 }
 

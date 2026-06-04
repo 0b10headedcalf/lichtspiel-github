@@ -17,6 +17,7 @@ import {
   isType,
   isWireMessage,
   makeDefaultRow,
+  signatureOf,
   wire,
 } from '@lichtspiel/schemas';
 import { BridgeServer } from './websocketServer.js';
@@ -68,10 +69,11 @@ function nextMessage(ws: WebSocket, type: string, timeoutMs = 1500): Promise<Wir
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-function sampleMapping(name: string): AbletonMapping {
+function sampleMapping(name: string, setSignature?: string): AbletonMapping {
   return {
     version: '0.1.0',
     setName: name,
+    ...(setSignature ? { setSignature } : {}),
     updatedAt: '2026-06-03T00:00:00.000Z',
     session: { scenes: [makeDefaultRow({ index: 0, name: 'Scene1' })] },
     arrangement: {
@@ -96,14 +98,33 @@ async function main(): Promise<void> {
     'store.load round-trips the mapping',
   );
   ok(!store.load('Nope').ok, 'store.load of a missing name → not ok');
+  // Same-name save overwrites in place — no duplicate file (the Save semantics).
+  ok(store.save('UnitSet', sampleMapping('OVERWRITTEN')).ok, 'store.save same name again → ok');
+  ok(store.list().filter((n) => n === 'UnitSet').length === 1, 'same-name save overwrites — no duplicate');
+  const re = store.load('UnitSet');
+  ok(re.ok && re.mapping.setName === 'OVERWRITTEN', 'overwrite replaced the content');
   ok(!store.save('../escape', m).ok, 'store.save rejects path traversal');
   ok(!store.save('Bad', { version: 'x', foo: 1 } as unknown as AbletonMapping).ok, 'store.save rejects an invalid mapping (ajv)');
+
+  // ── set-awareness: signature round-trips + rename + delete ─────────
+  const sigSet = sampleMapping('SigSet', signatureOf({ scenes: [{ name: 'Scene1' }], locators: [] }));
+  ok(store.save('SigSet', sigSet).ok, 'store.save mapping with setSignature → ok');
+  const detailed = store.listDetailed();
+  ok(
+    detailed.some((p) => p.name === 'SigSet' && p.setSignature === sigSet.setSignature),
+    'store.listDetailed carries the setSignature',
+  );
+  ok(store.rename('SigSet', 'SigSet2').ok, 'store.rename → ok');
+  ok(!store.list().includes('SigSet') && store.list().includes('SigSet2'), 'rename moved the file');
+  ok(!store.rename('SigSet2', 'UnitSet').ok, 'store.rename won’t clobber an existing target');
+  ok(store.remove('SigSet2').ok && !store.list().includes('SigSet2'), 'store.remove deletes the preset');
+  ok(store.remove('Nope').ok, 'store.remove of a missing name → ok (idempotent)');
 
   // ── Over the WebSocket ────────────────────────────────────────────
   const server = new BridgeServer({
     host: HOST,
     port: PORT,
-    snapshot: async () => ADE_SLEUTH_SNAPSHOT,
+    snapshot: async () => ({ ...ADE_SLEUTH_SNAPSHOT, signature: signatureOf(ADE_SLEUTH_SNAPSHOT) }),
     mappingStore: store,
   });
   server.start();
@@ -116,20 +137,24 @@ async function main(): Promise<void> {
     p5.send(JSON.stringify(wire('ableton.snapshotRequest', {})));
     const got = await want;
     ok(
-      isType(got, 'ableton.snapshot') && got.payload.locators.length === ADE_SLEUTH_SNAPSHOT.locators.length,
-      'snapshotRequest → ableton.snapshot (fixture, all locators)',
+      isType(got, 'ableton.snapshot') &&
+        got.payload.locators.length === ADE_SLEUTH_SNAPSHOT.locators.length &&
+        typeof got.payload.signature === 'string' && got.payload.signature.length > 0,
+      'snapshotRequest → ableton.snapshot (fixture, all locators, stamped signature)',
     );
   } catch (err) {
     ok(false, `snapshot over WS: ${String(err)}`);
   }
 
+  const wsSig = signatureOf(ADE_SLEUTH_SNAPSHOT);
   try {
     const want = nextMessage(p5, 'mapping.result');
-    p5.send(JSON.stringify(wire('mapping.request', { op: 'save', name: 'WsSet', mapping: sampleMapping('WsSet') })));
+    p5.send(JSON.stringify(wire('mapping.request', { op: 'save', name: 'WsSet', mapping: sampleMapping('WsSet', wsSig) })));
     const got = await want;
     ok(
-      isType(got, 'mapping.result') && got.payload.op === 'save' && got.payload.ok && (got.payload.names ?? []).includes('WsSet'),
-      'mapping.request save → result ok + names',
+      isType(got, 'mapping.result') && got.payload.op === 'save' && got.payload.ok &&
+        (got.payload.presets ?? []).some((pr) => pr.name === 'WsSet' && pr.setSignature === wsSig),
+      'mapping.request save → result ok + set-aware presets',
     );
   } catch (err) {
     ok(false, `save over WS: ${String(err)}`);
@@ -145,6 +170,33 @@ async function main(): Promise<void> {
     );
   } catch (err) {
     ok(false, `load over WS: ${String(err)}`);
+  }
+
+  try {
+    const want = nextMessage(p5, 'mapping.result');
+    p5.send(JSON.stringify(wire('mapping.request', { op: 'rename', name: 'WsSet', newName: 'WsSet2' })));
+    const got = await want;
+    ok(
+      isType(got, 'mapping.result') && got.payload.op === 'rename' && got.payload.ok &&
+        (got.payload.presets ?? []).some((pr) => pr.name === 'WsSet2') &&
+        !(got.payload.presets ?? []).some((pr) => pr.name === 'WsSet'),
+      'mapping.request rename → result ok + presets reflect the new name',
+    );
+  } catch (err) {
+    ok(false, `rename over WS: ${String(err)}`);
+  }
+
+  try {
+    const want = nextMessage(p5, 'mapping.result');
+    p5.send(JSON.stringify(wire('mapping.request', { op: 'delete', name: 'WsSet2' })));
+    const got = await want;
+    ok(
+      isType(got, 'mapping.result') && got.payload.op === 'delete' && got.payload.ok &&
+        !(got.payload.presets ?? []).some((pr) => pr.name === 'WsSet2'),
+      'mapping.request delete → result ok + preset removed',
+    );
+  } catch (err) {
+    ok(false, `delete over WS: ${String(err)}`);
   }
 
   p5.close();

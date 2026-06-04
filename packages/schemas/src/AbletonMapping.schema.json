@@ -9,6 +9,7 @@
   "properties": {
     "version": { "const": "0.1.0" },
     "setName": { "type": "string" },
+    "setSignature": { "type": "string" },
     "updatedAt": { "type": "string" },
     "session": {
       "type": "object",

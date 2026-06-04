@@ -61,6 +61,7 @@ const examples = [
     {
       version: '0.1.0',
       setName: 'ADE_Sleuth',
+      setSignature: 'abc123',
       updatedAt: '2026-06-03T00:00:00.000Z',
       session: {
         scenes: [

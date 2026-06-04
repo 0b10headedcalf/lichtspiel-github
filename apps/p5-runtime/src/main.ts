@@ -9,12 +9,15 @@
 import './style.css';
 import {
   type AbletonMapping,
+  type AbletonSnapshot,
   type LedFramePayload,
+  type MappingPresetInfo,
   type NumericParamKey,
   type VisualParamVector,
   ADE_SLEUTH_SNAPSHOT,
   clamp01,
   describeSetup,
+  signatureOf,
   wire,
 } from '@lichtspiel/schemas';
 import { createMonomeDevices } from './monomeDevices.js';
@@ -165,6 +168,27 @@ function localLoadNamed(name: string): AbletonMapping | null {
     return null;
   }
 }
+function localDeleteNamed(name: string): void {
+  try {
+    localStorage.removeItem(`lichtspiel.ableton.map.${name}`);
+    localStorage.setItem(NAMES_LS, JSON.stringify(localNames().filter((n) => n !== name)));
+  } catch {
+    /* ignore */
+  }
+}
+function localRenameNamed(from: string, to: string): void {
+  const m = localLoadNamed(from);
+  if (!m) return;
+  localSaveNamed(to, m);
+  localDeleteNamed(from);
+}
+/** Browser-only preset list with set fingerprints (mirrors the bridge's listDetailed). */
+function localDetailed(): MappingPresetInfo[] {
+  return localNames().map((name) => {
+    const m = localLoadNamed(name);
+    return { name, setSignature: m?.setSignature, setName: m?.setName };
+  });
+}
 let abletonMap: AbletonMapping | null = loadLocalMapping();
 let bridgeConnected = false; // drives bridge-vs-local for Refresh/Save/Load (Phase 5b)
 
@@ -218,20 +242,19 @@ const mappingPanel = new AbletonMappingPanel({
       bridge.send(wire('ableton.snapshotRequest', {}));
       return;
     }
-    abletonMap = mergeSnapshot(abletonMap, ADE_SLEUTH_SNAPSHOT);
-    mappingPanel.setMapping(abletonMap);
-    saveLocalMapping(abletonMap);
+    applySnapshot({ ...ADE_SLEUTH_SNAPSHOT, signature: signatureOf(ADE_SLEUTH_SNAPSHOT) });
   },
   onSave: (name) => {
     if (!abletonMap) return;
-    abletonMap = { ...abletonMap, setName: name, updatedAt: new Date().toISOString() };
+    // The preset NAME is the filename; the mapping's `setName`/`setSignature`
+    // stay the Live set's identity (so the Load list can flag set matches).
+    abletonMap = { ...abletonMap, updatedAt: new Date().toISOString() };
     saveLocalMapping(abletonMap); // local cache, always
-    mappingPanel.setMapping(abletonMap);
     if (bridgeConnected) {
       bridge.send(wire('mapping.request', { op: 'save', name, mapping: abletonMap }));
     } else {
       localSaveNamed(name, abletonMap);
-      mappingPanel.setNames(localNames());
+      mappingPanel.setPresets(localDetailed());
     }
   },
   onLoad: (name) => {
@@ -246,9 +269,25 @@ const mappingPanel = new AbletonMappingPanel({
       saveLocalMapping(abletonMap);
     }
   },
+  onRename: (name, newName) => {
+    if (bridgeConnected) {
+      bridge.send(wire('mapping.request', { op: 'rename', name, newName }));
+      return;
+    }
+    localRenameNamed(name, newName);
+    mappingPanel.setPresets(localDetailed());
+  },
+  onDelete: (name) => {
+    if (bridgeConnected) {
+      bridge.send(wire('mapping.request', { op: 'delete', name }));
+      return;
+    }
+    localDeleteNamed(name);
+    mappingPanel.setPresets(localDetailed());
+  },
   onListRequest: () => {
     if (bridgeConnected) bridge.send(wire('mapping.request', { op: 'list' }));
-    else mappingPanel.setNames(localNames());
+    else mappingPanel.setPresets(localDetailed());
   },
   onPreview: (evt) => respond(evt),
   onEdit: (m) => {
@@ -320,29 +359,43 @@ bus.on('locator.crossed', (p) => {
 });
 
 // Phase 5b — snapshot + mapping persistence from the bridge.
-bus.on('ableton.snapshot', (snap) => {
+// Apply a fresh snapshot (bridge or local fixture): merge/replace the rows, track
+// the LIVE-set signature for preset matching (🟢/🔴), and clear the current preset
+// when a set change replaced the rows (its preset no longer applies to the new set).
+function applySnapshot(snap: AbletonSnapshot): void {
+  const prevSig = abletonMap?.setSignature;
   abletonMap = mergeSnapshot(abletonMap, snap);
+  if (abletonMap.setSignature !== prevSig) mappingPanel.setCurrentPreset(null);
   mappingPanel.setMapping(abletonMap);
+  mappingPanel.setLiveSignature(snap.signature);
   saveLocalMapping(abletonMap);
-});
+}
+bus.on('ableton.snapshot', (snap) => applySnapshot(snap));
 bus.on('mapping.result', (r) => {
   if (r.op === 'list') {
-    mappingPanel.setNames(r.names ?? []);
+    mappingPanel.setPresets(r.presets ?? []);
   } else if (r.op === 'load' && r.ok && r.mapping) {
     abletonMap = r.mapping;
     mappingPanel.setMapping(abletonMap);
     saveLocalMapping(abletonMap);
-  } else if (r.op === 'save') {
-    if (r.names) mappingPanel.setNames(r.names);
-    if (!r.ok) console.warn('[lichtspiel] mapping save failed:', r.error);
+  } else if (r.presets) {
+    // save / rename / delete replies carry the refreshed preset list.
+    mappingPanel.setPresets(r.presets);
+    if (!r.ok) console.warn(`[lichtspiel] mapping ${r.op} failed:`, r.error);
+  } else if (!r.ok) {
+    console.warn(`[lichtspiel] mapping ${r.op} failed:`, r.error);
   }
 });
 
 bus.on('status', ({ connected }) => {
+  const wasConnected = bridgeConnected;
   bridgeConnected = connected;
   debug.setConnected(connected);
   connEl.textContent = connected ? 'bridge connected' : 'browser-only';
   connEl.classList.toggle('live', connected);
+  // On (re)connect, pull the saved preset list so the Load ▾ is populated without
+  // needing to rebuild it mid-open (which was breaking the picker).
+  if (connected && !wasConnected) bridge.send(wire('mapping.request', { op: 'list' }));
 });
 
 // Monome (real or emulated) → the profile-aware column-fader idiom + per-sketch dispatch.

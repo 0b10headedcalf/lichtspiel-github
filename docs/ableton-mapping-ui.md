@@ -14,11 +14,11 @@ tracks — see `docs/ableton-integration.md`.
 
 ## The model: snapshot → map → perform
 
-- **Snapshot** is a deliberate, manual action (the `Refresh` button) — *not*
-  continuous polling. It reads the set's **named-only** scenes + locators into an
-  in-memory table. Runtime then reduces to: detect event → look up the row →
-  activate. (Matches the research dossiers: structure-refresh is occasional, trigger
-  detection is continuous + minimal.)
+- **Snapshot** reads the set's **named-only** scenes + locators into an in-memory
+  table — via the `Refresh` button, **or automatically when a different set loads**
+  (see *Set-awareness* below). Runtime then reduces to: detect event → look up the
+  row → activate. (Matches the research dossiers: structure-refresh is occasional,
+  trigger detection is continuous + minimal.)
 - **Map**: each scene/locator becomes an editable row.
 - **Perform**: a `scene.launched` / `locator.crossed` event (from the M4L device or
   the feeder, or a `▶` preview) resolves against the table.
@@ -43,8 +43,9 @@ Each row picks a **Template** and a **Variant policy**:
 
 Top-right, collapsible, **toggle `a`** (collapsed by default so it never covers the
 canvas). Header shows `src` (live/simulated) · `fallback` (mapped/random) · lock ·
-set name. Controls: `Refresh` · `Save` · `Load ▾`. Two tables — **Arrangement
-locators** and **Session scenes** — each row:
+current preset (`▸ name 🟢/🔴`) · set name. Controls: `Refresh` · `Save` · `Save As`
+· `Load ▾` · `Rename` · `Delete`. Two tables — **Arrangement locators** and
+**Session scenes** — each row:
 
 ```
 enabled ☑ | name | time/idx | Template ▾ | Variant ▾ | ▶ preview | last-triggered
@@ -54,6 +55,31 @@ enabled ☑ | name | time/idx | Template ▾ | Variant ▾ | ▶ preview | last-
   rehearse a section's visual without Ableton.
 - The `last` cell flashes the activated template (or `🔒 locked` / `— off` when
   suppressed) and the row highlights.
+
+## Set-awareness + presets
+
+A set is identified by a **structural fingerprint** — `signatureOf()` hashes its
+scene + locator **names/times** (`packages/schemas/src/abletonMapping.ts`). The
+bridge stamps every snapshot with this `signature`; a saved mapping remembers the
+`setSignature` it was built for.
+
+- **Auto-snapshot on set change.** The feeder computes the fingerprint on its
+  existing 300 ms poll; when it changes (a *different* set opened/closed) it pokes
+  the bridge (`ableton.snapshotRequest`) → the bridge re-snapshots + broadcasts →
+  p5 **replaces** the rows with fresh all-random defaults. No new polling; the closed
+  set's stale rows are discarded, never shown.
+- **Replace vs merge** (`mergeSnapshot`): a snapshot whose `signature` differs from
+  the current mapping **replaces** the rows (fresh defaults); the **same** signature
+  **merges** — name-first match preserves the performer's edits, new rows get
+  defaults, vanished rows are kept + flagged `stale`.
+- **Presets.** Multiple **named** presets per set: `Save` / `Save As` / `Load ▾` /
+  `Rename` / `Delete`. **Save** overwrites the loaded preset in place (same name →
+  no duplicate); **Save As** prompts for a new name. Each preset carries its
+  `setSignature`; the `Load` list flags each against the **open set** — **🟢 matches**
+  (sorted to the top) vs **🔴 a different set** — so it's obvious which presets fit.
+  The match is anchored to the live set, so loading a 🔴 preset never relabels or
+  reorders the list. **A preset is never auto-loaded** — loading is always explicit.
+  Default for any set is **all-random**.
 
 ## Resolver rules (`apps/p5-runtime/src/live/abletonRetrieval.ts`)
 
@@ -76,9 +102,10 @@ groundwork; logged for now).
 
 The **bridge owns** the authoritative JSON files
 (`config/ableton-mappings/<name>.json`, override `LICHTSPIEL_MAPPINGS_DIR`). The
-panel's `Save` / `Load ▾` round-trip through the bridge
+panel's `Save` / `Load ▾` / `Rename` / `Delete` round-trip through the bridge
 (`apps/live-bridge/src/mappingStore.ts`), which **ajv-validates** every mapping on
-the way in/out and rejects path-traversal names.
+the way in/out and rejects path-traversal names. `listDetailed()` returns each
+preset's `setSignature` so the panel can flag set matches.
 
 Browser-only (no bridge) still works: the panel autosaves the working mapping to
 **localStorage** (survives reloads) and `Save`/`Load` use local named slots. When
@@ -102,10 +129,10 @@ snapshot is replayed to a freshly-connected p5 (like `device.attached`).
 | Message | Dir | Purpose |
 |---------|-----|---------|
 | `scene.launched` / `locator.crossed` | →p5 | the Phase-5a triggers (unchanged) |
-| `ableton.snapshotRequest` | p5→ | ask the bridge to snapshot the set |
-| `ableton.snapshot` | →p5 | named scenes + locators |
-| `mapping.request` `{op:load\|save\|list}` | p5→ | persistence ops |
-| `mapping.result` | →p5 | op result (mapping / names / error) |
+| `ableton.snapshotRequest` | p5→ / feeder→ | ask the bridge to snapshot the set (manual Refresh, or the feeder on set change) |
+| `ableton.snapshot` | →p5 | named scenes + locators + structural `signature` |
+| `mapping.request` `{op:load\|save\|list\|rename\|delete}` | p5→ | persistence ops |
+| `mapping.result` | →p5 | op result (mapping / set-aware `presets` / error) |
 | `visual.activated` | p5→ | activation ack (metrics groundwork) |
 
 ## How to run + verify
@@ -119,7 +146,8 @@ pnpm --filter @lichtspiel/live-bridge test:osc
 pnpm --filter @lichtspiel/live-bridge test:mapping   # store + snapshot/mapping over WS
 
 # browser (fixture, no Ableton needed)
-pnpm dev:p5            # http://localhost:5273 → press `a`, Refresh, edit rows, ▶ preview
+pnpm dev:p5            # http://localhost:5273 → press `a`, Refresh, edit rows, ▶ preview,
+                       # Save/Load/Rename/Delete presets
 
 # live (Ableton drives it) — THREE processes:
 pnpm dev:bridge        # set LICHTSPIEL_SNAPSHOT_FIXTURE=1 if Ableton's Remote Script is down
@@ -143,3 +171,8 @@ pnpm dev:feeder        # the trigger path — polls 9877, emits scene.launched/l
    them → the mapped visual loads; the monome stays playable; `space` locks/suppresses.
 5. If nothing swaps: confirm `pnpm dev:feeder` is running and the AbletonMCP Control Surface is
    on (status bar "Listening … on port 9877"); then copy back the bridge log + the browser console.
+6. **Set-awareness:** with the feeder running, **swap to a different set** (e.g.
+   `Super_Colitis_new3_mastered Project_v2` ⇄ ADE_Sleuth). The rows should
+   **auto-replace** with the new set's scenes/locators (all-random) — never the closed
+   set's data. Curate + `Save` a preset per set; `Load ▾` flags presets matching the
+   open set with a `●`.

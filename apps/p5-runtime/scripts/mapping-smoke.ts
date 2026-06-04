@@ -6,7 +6,7 @@
  * tsx; wired into `pnpm smoke`.
  */
 
-import { type AbletonMapping, type AbletonSnapshot, makeDefaultRow } from '@lichtspiel/schemas';
+import { type AbletonMapping, type AbletonSnapshot, makeDefaultRow, signatureOf } from '@lichtspiel/schemas';
 import { TemplateRegistry } from '../src/templateRegistry.js';
 import type { VisualTemplate } from '../src/visualTemplate.js';
 import { type AbletonEvent, resolveActivation } from '../src/live/abletonRetrieval.js';
@@ -190,6 +190,62 @@ console.log('snapshot merge:');
   const merged3 = mergeSnapshot(merged2, snap3);
   const intro = merged3.arrangement.locators.find((r) => r.name === 'Intro')!;
   ok(intro.index === 5 && intro.time === 4, 'persisted row refreshes index/time on re-snapshot');
+}
+
+console.log('set-awareness (signature replace-vs-merge):');
+{
+  const sigA = signatureOf({ scenes: [{ name: 'S1' }], locators: [{ name: 'Intro', time: 0 }] });
+  const sigA2 = signatureOf({ scenes: [{ name: 'S1' }], locators: [{ name: 'Intro', time: 0 }] });
+  const sigB = signatureOf({ scenes: [{ name: 'S1' }], locators: [{ name: 'Intro', time: 8 }] });
+  ok(sigA === sigA2, 'signatureOf is deterministic for the same structure');
+  ok(sigA !== sigB, 'signatureOf differs when a locator time changes');
+
+  const setA: AbletonSnapshot = {
+    setName: 'A',
+    signature: sigA,
+    scenes: [{ index: 0, name: 'S1' }],
+    locators: [{ index: 0, name: 'Intro', time: 0 }],
+  };
+  const mapA = mergeSnapshot(null, setA);
+  ok(mapA.setSignature === sigA, 'merge stamps the snapshot signature onto the mapping');
+
+  const editedA: AbletonMapping = {
+    ...mapA,
+    arrangement: {
+      locators: mapA.arrangement.locators.map((r) => ({
+        ...r,
+        templateMode: 'fixed' as const,
+        templateId: 'b',
+        enabled: false,
+      })),
+    },
+  };
+
+  // Same signature → MERGE (edits preserved).
+  const sameAgain = mergeSnapshot(editedA, { ...setA });
+  ok(
+    sameAgain.arrangement.locators[0]!.templateMode === 'fixed' && sameAgain.arrangement.locators[0]!.enabled === false,
+    'same signature → merges, preserving edits',
+  );
+
+  // Different signature (a new set loaded) → REPLACE with fresh defaults; the closed set is discarded.
+  const setB: AbletonSnapshot = {
+    setName: 'B',
+    signature: signatureOf({ scenes: [{ name: 'Verse' }, { name: 'Chorus' }], locators: [] }),
+    scenes: [{ index: 0, name: 'Verse' }, { index: 1, name: 'Chorus' }],
+    locators: [],
+  };
+  const replaced = mergeSnapshot(editedA, setB);
+  ok(replaced.setSignature === setB.signature, 'different signature → mapping adopts the new set signature');
+  ok(
+    replaced.session.scenes.length === 2 && replaced.arrangement.locators.length === 0,
+    'replace → only the new set rows',
+  );
+  ok(
+    replaced.session.scenes.every((r) => r.templateMode === 'random' && !r.stale),
+    'replaced rows are fresh all-random defaults (no stale carryover)',
+  );
+  ok(!replaced.arrangement.locators.some((r) => r.name === 'Intro'), 'the closed set rows are gone (not flagged stale)');
 }
 
 console.log('makeDefaultRow:');

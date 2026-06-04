@@ -55,18 +55,24 @@ function mergeRows(prev: readonly MappingRow[], snap: readonly RowInit[]): Mappi
 }
 
 /**
- * Merge a snapshot into the current mapping (or a fresh one). Name-first match
- * preserves edits; new scenes/locators get default rows; missing rows are kept
- * + flagged `stale`. Pure — returns a new mapping.
+ * Merge a snapshot into the current mapping (or a fresh one). Set-aware: when the
+ * snapshot's structural `signature` differs from the current mapping's
+ * `setSignature` (a DIFFERENT set loaded), the rows are REPLACED with fresh
+ * all-random defaults — the closed set's edits are stale and discarded. When the
+ * signature matches (or neither has one), it MERGES: name-first match preserves
+ * the performer's edits, new scenes/locators get default rows, and rows the
+ * snapshot no longer contains are kept + flagged `stale`. Pure — returns a new mapping.
  */
 export function mergeSnapshot(
   current: AbletonMapping | null,
   snapshot: AbletonSnapshot,
 ): AbletonMapping {
-  const prev = current ?? emptyMapping(snapshot.setName);
+  const replacing = !!snapshot.signature && snapshot.signature !== current?.setSignature;
+  const prev = replacing || !current ? emptyMapping(snapshot.setName) : current;
   return {
     version: MAPPING_VERSION,
     setName: snapshot.setName || prev.setName,
+    setSignature: snapshot.signature ?? current?.setSignature,
     updatedAt: new Date().toISOString(),
     session: { scenes: mergeRows(prev.session.scenes, snapshot.scenes) },
     arrangement: { locators: mergeRows(prev.arrangement.locators, snapshot.locators) },

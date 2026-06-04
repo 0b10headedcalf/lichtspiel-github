@@ -316,7 +316,16 @@ After the in-Live build, the user asked for three refinements first (latency →
   keyboard + Ableton. Idiom templates were never affected (the `usesIdioms()` gate skipped the
   fallback; their presses fire within-sketch actions only).
 
-- ⬜ **Mapping set-awareness + presets** (full-stack: feeder + bridge + schema + p5). **Decisions:**
+- ✅ **Mapping set-awareness + presets — DONE (in-Live verified 2026-06-05).**
+  Full-stack: feeder + bridge + schema + p5. `signatureOf()` structural fingerprint
+  (`packages/schemas/src/abletonMapping.ts`); `mergeSnapshot` replaces-vs-merges by signature; the
+  bridge stamps every snapshot + gained `rename`/`remove`/`listDetailed`; the feeder pokes
+  `ableton.snapshotRequest` on set change (no new polling); the panel gained Save/Save As,
+  Rename/Delete + a set-aware Load list (🟢 matches the open set / 🔴 a different set, anchored to
+  the live signature so loading a 🔴 preset never breaks the picker). Gates green (typecheck ·
+  validate:schemas · smoke:p5 29 checks · test:osc · test:mapping incl. rename/delete/signature/
+  overwrite · p5 build); verified live against real Ableton (set-swap auto-replaced the rows: a
+  15-scene set ⇄ ADE_Sleuth's 2/6). **Decisions (locked):**
   **structural fingerprint** for set identity (a hash of scene + locator names/times; no Remote-Script
   change) · **default = ALL RANDOM, NEVER auto-load a preset** · **multiple NAMED presets per set,
   manual save / load / rename / delete** (never auto-loaded).

@@ -147,7 +147,7 @@ export class BridgeServer {
       return;
     }
     if (p.op === 'list') {
-      this.sendTo(client.ws, wire('mapping.result', { op: 'list', ok: true, names: store.list() }));
+      this.sendTo(client.ws, wire('mapping.result', { op: 'list', ok: true, presets: store.listDetailed() }));
       return;
     }
     const name = p.name ?? '';
@@ -161,6 +161,26 @@ export class BridgeServer {
       );
       return;
     }
+    if (p.op === 'rename') {
+      const r = store.rename(name, p.newName ?? '');
+      this.sendTo(
+        client.ws,
+        r.ok
+          ? wire('mapping.result', { op: 'rename', ok: true, name: p.newName ?? name, presets: store.listDetailed() })
+          : wire('mapping.result', { op: 'rename', ok: false, name, error: r.error }),
+      );
+      return;
+    }
+    if (p.op === 'delete') {
+      const r = store.remove(name);
+      this.sendTo(
+        client.ws,
+        r.ok
+          ? wire('mapping.result', { op: 'delete', ok: true, name, presets: store.listDetailed() })
+          : wire('mapping.result', { op: 'delete', ok: false, name, error: r.error }),
+      );
+      return;
+    }
     // save
     if (!p.mapping) {
       this.sendTo(client.ws, wire('mapping.result', { op: 'save', ok: false, name, error: 'no mapping in request' }));
@@ -170,7 +190,7 @@ export class BridgeServer {
     this.sendTo(
       client.ws,
       r.ok
-        ? wire('mapping.result', { op: 'save', ok: true, name, names: store.list() })
+        ? wire('mapping.result', { op: 'save', ok: true, name, presets: store.listDetailed() })
         : wire('mapping.result', { op: 'save', ok: false, name, error: r.error }),
     );
   }

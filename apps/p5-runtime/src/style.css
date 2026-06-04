@@ -394,6 +394,10 @@ body {
 .ap-setname {
   color: #8effc0;
 }
+.ap-preset {
+  color: #ffd479;
+  font-weight: 600;
+}
 .ap-controls {
   display: flex;
   flex-wrap: wrap;

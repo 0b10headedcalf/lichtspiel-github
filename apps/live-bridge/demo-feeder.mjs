@@ -37,6 +37,20 @@ let lastT = -1;
 let lastScene = -1;
 const SEEK_GUARD = 8;
 let busy = false;
+let lastSig = null;
+
+/** Cheap STRUCTURAL fingerprint of the set (scene + locator names/times) for
+ * change-detection only — it needn't match the bridge's canonical signature. */
+function setFingerprint(si) {
+  const scenes = Array.isArray(si.scenes) ? si.scenes : [];
+  const cuePts = Array.isArray(si.cue_points) ? si.cue_points : [];
+  const canonical =
+    'scenes:' + scenes.map((s) => String((s && s.name) || '')).join('|') +
+    ';loc:' + cuePts.map((c) => String((c && c.name) || '') + '@' + Number((c && c.time) || 0).toFixed(3)).join('|');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < canonical.length; i++) { h ^= canonical.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
 
 async function tick() {
   if (busy) return;
@@ -46,6 +60,16 @@ async function tick() {
     const si = resp && resp.result;
     if (si && typeof si === 'object') {
       if (Array.isArray(si.cue_points) && si.cue_points.length) cues = si.cue_points;
+      // Auto-snapshot on set CHANGE: when the structural fingerprint changes (a
+      // different set opened/closed), poke the bridge to re-snapshot + broadcast →
+      // p5 replaces the rows with fresh defaults. lastSig only advances once the
+      // poke is actually sent, so the first set (sent before the WS is open) isn't lost.
+      const sig = setFingerprint(si);
+      if (sig !== lastSig && wsReady && ws.readyState === 1) {
+        lastSig = sig;
+        fire('ableton.snapshotRequest', {});
+        console.log('[feeder] set change -> ableton.snapshotRequest', sig);
+      }
       if (!si.is_playing) {
         lastT = -1; lastScene = -1; // stopped
       } else if (si.back_to_arranger) {

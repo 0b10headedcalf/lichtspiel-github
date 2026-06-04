@@ -44,6 +44,12 @@ export interface AbletonMapping {
   version: string;
   /** The Live set this plan was snapshotted from (best-effort label). */
   setName: string;
+  /**
+   * Structural fingerprint of the set this plan was built for (see `signatureOf`).
+   * Lets the panel flag presets that match the current set, and lets `mergeSnapshot`
+   * decide replace-vs-merge. Optional for backward-compat with pre-set-awareness files.
+   */
+  setSignature?: string;
   /** ISO-8601 timestamp of the last edit/save. */
   updatedAt: string;
   session: { scenes: MappingRow[] };
@@ -69,6 +75,36 @@ export interface AbletonSnapshot {
   setName: string;
   scenes: SnapshotScene[];
   locators: SnapshotLocator[];
+  /**
+   * Structural fingerprint of this set (see `signatureOf`). Stamped by the bridge
+   * on every snapshot; `mergeSnapshot` compares it to the current mapping's
+   * `setSignature` to decide whether to replace the rows (new set) or merge (same set).
+   */
+  signature?: string;
+}
+
+/**
+ * A short, stable STRUCTURAL fingerprint of a set's named scenes + locators
+ * (names, plus locator times, in order). Re-opening the same set hashes equal;
+ * a different set — or an edited scene/locator structure — hashes differently.
+ * The bridge stamps it on every snapshot; the panel uses it to flag matching
+ * presets and `mergeSnapshot` uses it to decide replace-vs-merge. Deliberately
+ * ignores `setName` (not always reported) and the rows' policy — purely the
+ * set's shape. Deterministic + dependency-free (browser + Node): FNV-1a/base36.
+ */
+export function signatureOf(snap: {
+  scenes: readonly { name: string }[];
+  locators: readonly { name: string; time: number }[];
+}): string {
+  const canonical =
+    `scenes:${snap.scenes.map((s) => s.name).join('|')}` +
+    `;loc:${snap.locators.map((l) => `${l.name}@${l.time.toFixed(3)}`).join('|')}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < canonical.length; i++) {
+    h ^= canonical.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
 }
 
 /**

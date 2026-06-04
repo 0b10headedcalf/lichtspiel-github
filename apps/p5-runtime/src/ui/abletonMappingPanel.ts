@@ -11,7 +11,7 @@
  * storage. Mirrors the GesturalPanel DOM/CSS conventions (`el()`, collapsed class).
  */
 
-import type { AbletonMapping, MappingRow, VariantMode } from '@lichtspiel/schemas';
+import type { AbletonMapping, MappingPresetInfo, MappingRow, VariantMode } from '@lichtspiel/schemas';
 import type { AbletonEvent, EventSource, RetrievalMode } from '../live/abletonRetrieval.js';
 
 export interface TemplateChoice {
@@ -28,7 +28,11 @@ export interface AbletonMappingPanelOptions {
   onSave(name: string): void;
   /** Load a saved mapping by name. */
   onLoad(name: string): void;
-  /** Request the list of saved mapping names (to populate the Load dropdown). */
+  /** Rename a saved preset. */
+  onRename(name: string, newName: string): void;
+  /** Delete a saved preset. */
+  onDelete(name: string): void;
+  /** Request the list of saved presets (to populate the Load dropdown). */
   onListRequest(): void;
   /** Fire a row's event locally (manual preview). */
   onPreview(evt: AbletonEvent): void;
@@ -49,6 +53,19 @@ export class AbletonMappingPanel {
   private source: EventSource = 'live';
   private fallback: RetrievalMode = 'mapped';
   private locked = false;
+  /** Saved presets (for the set-aware Load list). */
+  private presets: MappingPresetInfo[] = [];
+  /**
+   * Structural signature of the currently-OPEN Ableton set (from the last
+   * snapshot). Match flags compare presets against THIS — not the loaded
+   * mapping — so loading a preset built for a different set never relabels the
+   * list or reorders it (which was breaking the picker).
+   */
+  private liveSig: string | undefined;
+  /** A rebuild was requested while the Load popup was open; do it on blur. */
+  private loadDirty = false;
+  /** The preset currently loaded/saved — the target of Save / Rename / Delete. */
+  private currentPresetName: string | null = null;
   /** row → its <tr> + last-cell, so markTriggered can flash without a full re-render. */
   private readonly rowEls = new Map<MappingRow, { tr: HTMLElement; last: HTMLElement }>();
 
@@ -72,20 +89,47 @@ export class AbletonMappingPanel {
 
     const controls = el('div', 'ap-controls');
     const refreshBtn = button('Refresh', () => this.opts.onRefresh());
-    const saveBtn = button('Save', () => {
-      const name = window.prompt('Save mapping as:', this.mapping?.setName || 'mapping');
-      if (name && name.trim()) this.opts.onSave(name.trim());
-    });
+    // Save = overwrite the loaded preset (no prompt); Save As = always prompt.
+    const saveBtn = button('Save', () => this.doSave(false));
+    const saveAsBtn = button('Save As', () => this.doSave(true));
     this.loadSel = document.createElement('select');
     this.loadSel.className = 'ap-load';
     this.resetLoadOptions();
-    this.loadSel.addEventListener('mousedown', () => this.opts.onListRequest());
+    // The list is refreshed on expand + after every op (and on connect), so it's
+    // already fresh when opened — we deliberately DON'T rebuild on mousedown,
+    // because replacing <option>s mid-open reorders them and drops the click. If a
+    // rebuild is requested while the popup is open, defer it to blur.
+    this.loadSel.addEventListener('blur', () => {
+      if (this.loadDirty) this.renderLoadOptions();
+    });
     this.loadSel.addEventListener('change', () => {
       const name = this.loadSel.value;
       this.loadSel.value = '';
-      if (name) this.opts.onLoad(name);
+      if (name) {
+        this.currentPresetName = name;
+        this.opts.onLoad(name);
+        this.renderMeta();
+      }
     });
-    controls.append(refreshBtn, saveBtn, this.loadSel);
+    const renameBtn = button('Rename', () => {
+      if (!this.currentPresetName) return window.alert('Load or save a preset first.');
+      const next = window.prompt(`Rename "${this.currentPresetName}" to:`, this.currentPresetName);
+      if (next && next.trim() && next.trim() !== this.currentPresetName) {
+        const from = this.currentPresetName;
+        this.currentPresetName = next.trim();
+        this.opts.onRename(from, next.trim());
+        this.renderMeta();
+      }
+    });
+    const deleteBtn = button('Delete', () => {
+      if (!this.currentPresetName) return window.alert('Load or save a preset first.');
+      if (window.confirm(`Delete preset "${this.currentPresetName}"?`)) {
+        this.opts.onDelete(this.currentPresetName);
+        this.currentPresetName = null;
+        this.renderMeta();
+      }
+    });
+    controls.append(refreshBtn, saveBtn, saveAsBtn, this.loadSel, renameBtn, deleteBtn);
 
     const locLabel = el('div', 'ap-section-label');
     locLabel.textContent = 'Arrangement locators';
@@ -114,15 +158,44 @@ export class AbletonMappingPanel {
     this.render();
   }
 
-  /** Populate the Load dropdown with saved mapping names. */
-  setNames(names: string[]): void {
-    this.resetLoadOptions();
-    for (const n of names) {
-      const o = document.createElement('option');
-      o.value = n;
-      o.textContent = n;
-      this.loadSel.append(o);
+  /** Populate the Load dropdown with saved presets, flagging the ones that match the current set. */
+  setPresets(presets: MappingPresetInfo[]): void {
+    this.presets = presets;
+    this.renderLoadOptions();
+  }
+
+  /**
+   * The structural signature of the currently-OPEN Ableton set (from the last
+   * snapshot). Drives the 🟢/🔴 match flags — anchored to the live set, so loading
+   * a preset for a different set doesn't relabel/reorder the Load list.
+   */
+  setLiveSignature(sig: string | undefined): void {
+    this.liveSig = sig;
+    this.renderLoadOptions();
+    this.renderMeta();
+  }
+
+  /** Save: overwrite the loaded preset (no prompt). Save As (or no current preset): prompt for a name. */
+  private doSave(asNew: boolean): void {
+    let name = this.currentPresetName;
+    if (asNew || !name) {
+      const proposed = window.prompt('Save preset as:', name || this.mapping?.setName || 'mapping');
+      if (!proposed || !proposed.trim()) return;
+      name = proposed.trim();
     }
+    this.currentPresetName = name;
+    this.opts.onSave(name); // same name → overwrites the existing file (no duplicate)
+    this.renderMeta();
+  }
+
+  /**
+   * Set/clear the preset that Rename / Delete act on — e.g. after a successful
+   * bridge load, or cleared when a set change replaced the rows (its preset no
+   * longer applies).
+   */
+  setCurrentPreset(name: string | null): void {
+    this.currentPresetName = name;
+    this.renderMeta();
   }
 
   setSource(s: EventSource): void {
@@ -168,11 +241,45 @@ export class AbletonMappingPanel {
     this.loadSel.value = '';
   }
 
+  /**
+   * Rebuild the Load dropdown — presets matching the open set (🟢) float to the
+   * top; presets for a different set are marked 🔴. Matching is against the LIVE
+   * set signature, not the loaded mapping. Deferred while the popup is open (a
+   * mid-open rebuild reorders the options and drops the click).
+   */
+  private renderLoadOptions(): void {
+    if (document.activeElement === this.loadSel) {
+      this.loadDirty = true;
+      return;
+    }
+    this.loadDirty = false;
+    this.resetLoadOptions();
+    const matches = (p: MappingPresetInfo): boolean => !!this.liveSig && p.setSignature === this.liveSig;
+    const ranked = [...this.presets].sort(
+      (a, b) => Number(matches(b)) - Number(matches(a)) || a.name.localeCompare(b.name),
+    );
+    for (const p of ranked) {
+      const m = matches(p);
+      const o = document.createElement('option');
+      o.value = p.name;
+      o.textContent = `${m ? '🟢' : '🔴'} ${p.name}`;
+      o.title = m ? 'matches the current set' : p.setName ? `for a different set: ${p.setName}` : 'for a different set';
+      this.loadSel.append(o);
+    }
+  }
+
   private renderMeta(): void {
+    let presetTag = '';
+    if (this.currentPresetName) {
+      // 🟢 the loaded preset is for the open set · 🔴 it's for a different set.
+      const match = !!this.liveSig && this.mapping?.setSignature === this.liveSig;
+      presetTag = `<span class="ap-preset">▸ ${escapeHtml(this.currentPresetName)} ${match ? '🟢' : '🔴'}</span>`;
+    }
     this.metaEl.innerHTML =
       `<span>src <b>${this.source}</b></span>` +
       `<span>fallback <b>${this.fallback}</b></span>` +
       `<span>${this.locked ? '🔒 locked' : '🔓 live'}</span>` +
+      presetTag +
       (this.mapping ? `<span class="ap-setname">${escapeHtml(this.mapping.setName || '—')}</span>` : '');
   }
 
@@ -189,6 +296,7 @@ export class AbletonMappingPanel {
     this.rowEls.clear();
     this.renderRows(this.locBody, 'locator', this.mapping?.arrangement.locators ?? []);
     this.renderRows(this.sceneBody, 'scene', this.mapping?.session.scenes ?? []);
+    this.renderLoadOptions(); // refresh set-match flags against the new signature
     this.renderMeta();
   }
 

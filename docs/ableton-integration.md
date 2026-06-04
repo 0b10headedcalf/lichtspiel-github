@@ -199,6 +199,13 @@ BUT it makes ableton-mcp's Remote Script a **runtime dependency** (the plan trea
 testing accelerator only) and adds an external process to launch. (Uses the `playing_scene`
 field added to the Remote Script's `get_scene_info` — loads on the next Ableton restart.)
 
+> **Phase 5b — auto-snapshot on set change (set-awareness).** The feeder also computes a cheap
+> structural fingerprint (scene + locator names/times) on its existing 300 ms poll; when it
+> changes (a *different* set opened/closed) it sends `ableton.snapshotRequest` → the bridge
+> re-snapshots + stamps the canonical `signature` + broadcasts `ableton.snapshot` → p5 replaces
+> the mapping rows with fresh defaults. **No new polling**, no Remote-Script change — it reuses
+> the read the feeder already does. See `docs/ableton-mapping-ui.md` (Set-awareness + presets).
+
 **C. Native event-driven** (the ideal, not built). Rewrite the M4L `js` to use LiveAPI
 **observers** (callbacks on change, no polling) → near-instant, self-contained, no
 ableton-mcp. Best long-term — keeps A's self-containment without the lag. The planned refinement.
