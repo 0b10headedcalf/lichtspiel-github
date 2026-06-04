@@ -346,18 +346,11 @@ bus.on('status', ({ connected }) => {
 });
 
 // Monome (real or emulated) → the profile-aware column-fader idiom + per-sketch dispatch.
+// The global fallback mapping (legacy/non-idiom templates) drives PARAMS only —
+// it never switches templates from the monome (scene nav = keyboard + Ableton).
 const mapping = createMonomeMapping(() => devices.active(), {
   setParam: (key, value) => host.setTargetParams({ [key]: value } as Partial<VisualParamVector>),
   nudgeParam: (key, delta) => adjustKey(key, delta),
-  selectSceneIndex: (i) => {
-    const t = registry.at(i);
-    if (t) selectScene(t, true);
-  },
-  nextScene: () => {
-    const t = registry.neighbor(host.currentTemplateId(), 1);
-    if (t) selectScene(t, true);
-  },
-  surprise: () => doSurprise(),
 });
 
 // Idiom-vs-global-mapping gate: when the active template declares `idioms`, its

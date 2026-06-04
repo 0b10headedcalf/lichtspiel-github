@@ -5,11 +5,13 @@
  *   GRID — each column is a vertical fader. Press a cell → set that column's
  *   param to (rows-1-y)/(rows-1). Columns 0..7 drive an 8-axis param bank
  *   (col 6 = palette, col 7 = strobe — echoing v3's palette + damage columns).
- *   On a grid 128 the extra columns (8..15) become scene-select buttons.
+ *   Extra grid-128 columns (8..15) are IGNORED here — the monome never switches
+ *   templates; scene/template nav lives on the keyboard + Ableton.
  *
  *   ARC — enc0 turn = semantic distance, enc1 turn = mutation amount
- *   (arc 4 adds enc2 = motion, enc3 = palette). enc0 press = surprise,
- *   enc1 press = next scene (mirrors v3's "advance + burst").
+ *   (arc 4 adds enc2 = motion, enc3 = palette). Encoder PRESSES are no-ops in this
+ *   fallback (they must never switch the sketch — that was the "encoder click
+ *   switched the template" bug).
  *
  * It reads the active MonomeSetup on every event, so swapping grid 64 ↔ 128
  * or arc 2 ↔ 4 (by detection or the emulator switch) adapts with no re-wiring.
@@ -49,10 +51,6 @@ export interface MonomeHandlers {
   setParam(key: NumericParamKey, value: number): void;
   /** Nudge a param by a relative delta (arc turn). */
   nudgeParam(key: NumericParamKey, delta: number): void;
-  /** Select a template by registry index (extra grid columns). */
-  selectSceneIndex(index: number): void;
-  nextScene(): void;
-  surprise(): void;
 }
 
 export interface MonomeMapping {
@@ -70,15 +68,11 @@ export function createMonomeMapping(
       if (e.state !== 1) return; // act on press
       const grid = getSetup().grid;
       const rows = grid?.rows ?? 8;
-      if (e.x < COLUMN_AXES.length) {
-        const axis = COLUMN_AXES[e.x];
-        if (!axis) return;
-        const value = rows > 1 ? (rows - 1 - e.y) / (rows - 1) : 1;
-        h.setParam(axis, clamp01(value));
-      } else {
-        // grid 128 extra columns → scene buttons (one column per scene)
-        h.selectSceneIndex(e.x - COLUMN_AXES.length);
-      }
+      if (e.x >= COLUMN_AXES.length) return; // extra grid-128 cols: no-op (no scene-switching)
+      const axis = COLUMN_AXES[e.x];
+      if (!axis) return;
+      const value = rows > 1 ? (rows - 1 - e.y) / (rows - 1) : 1;
+      h.setParam(axis, clamp01(value));
     },
 
     onArcDelta(e: ArcDeltaEvent): void {
@@ -87,10 +81,10 @@ export function createMonomeMapping(
       if (axis) h.nudgeParam(axis, step);
     },
 
-    onArcKey(e: ArcKeyEvent): void {
-      if (e.state !== 1) return;
-      if (e.encoder === 0) h.surprise();
-      else if (e.encoder === 1) h.nextScene();
+    onArcKey(): void {
+      // Encoder presses do NOT switch templates in the fallback mapping — scene/
+      // template nav is keyboard + Ableton only (this was the "encoder click
+      // switched the sketch" bug). Legacy templates simply ignore arc presses.
     },
   };
 }
