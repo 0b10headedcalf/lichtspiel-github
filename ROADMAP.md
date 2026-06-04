@@ -331,8 +331,8 @@ After the in-Live build, the user asked for three refinements first (latency →
     Load ▾ / **Rename** / Delete; the Load list flags presets matching the current set. `mappingStore`
     gains rename + delete. **No auto-load** — explicit only.
   - **Test sets** (self-contained Collect-All projects in `demo/ableton/`): **ADE_Sleuth** ⇄ the NEW
-    **`Super_Colitis_new3_mastered Project`** — swap between them in Live; confirm the rows
-    auto-replace on load and never show the closed set's data.
+    **`Super_Colitis_new3_mastered Project_v2`** (`Super_Colitis_new3_mastered_v2.als`) — swap between
+    them in Live; confirm the rows auto-replace on load and never show the closed set's data.
 
 - ⬜ **Takeover / manual monome mode** (p5-only, self-contained — the cleaner first build). A clear
   **MANUAL ⇄ TAKEOVER toggle in the monome twin dashboard** (`ui/monomeTwin.ts`). In TAKEOVER,
