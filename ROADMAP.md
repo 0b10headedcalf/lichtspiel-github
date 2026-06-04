@@ -276,7 +276,7 @@ monome-playable (idioms stay live), hot-swapping per song section.
 - 🔭 Deferred: name-based semantic retrieval as a 3rd mode (`ml-service/retrieve.py`
   already exists); richer Ableton rules; eventually constrained generation.
 
-### Phase 5b — scene/locator → animation mapping UI ✅ DONE (in-Live verified) · ⚠️ latency track NEXT
+### Phase 5b — scene/locator → animation mapping UI ✅ DONE (in-Live verified) · ⚠️ refinements NEXT, then latency
 
 Pre-plan/perform: snapshot a set's named scenes + locators, assign each a **Template**
 (fixed/random) + **Variant** policy (canonical/random), save/load, and have events
@@ -303,7 +303,50 @@ in 4 parts (A schema+resolver · B panel · C bridge · D docs) + pushed.
   the restart — known-fragile); the feeder bypasses it. **Runtime = 3 procs:** `dev:bridge`
   + `dev:p5` + **`dev:feeder`** (+ AbletonMCP Control Surface on, for the 9877 snapshot/poll).
 
-**▶ RESUME HERE — Phase 5b latency track ⬜ (Goal A of the original brief; the user's next ask)**
+**▶ RESUME HERE — Phase 5b REFINEMENTS ⬜ (the user's priority, BEFORE latency; planned 2026-06-04)**
+
+After the in-Live build, the user asked for three refinements first (latency → the back). Build in a
+**FRESH context** (the planning one is long). The animation-bug fix below is already done + committed
+(`464ecf0`).
+
+- ✅ **Animation bug FIXED (committed `464ecf0`):** the global fallback mapping (`monomeMapping.ts`,
+  legacy/non-idiom templates only) was switching templates on monome presses — arc enc0 press →
+  random template, enc1 press → next template, Grid-128 cols 8–15 → scene-select. **Removed**; the
+  fallback drives PARAMS only. **Rule: the monome NEVER switches templates** — scene/template nav is
+  keyboard + Ableton. Idiom templates were never affected (the `usesIdioms()` gate skipped the
+  fallback; their presses fire within-sketch actions only).
+
+- ⬜ **Mapping set-awareness + presets** (full-stack: feeder + bridge + schema + p5). **Decisions:**
+  **structural fingerprint** for set identity (a hash of scene + locator names/times; no Remote-Script
+  change) · **default = ALL RANDOM, NEVER auto-load a preset** · **multiple NAMED presets per set,
+  manual save / load / rename / delete** (never auto-loaded).
+  - **Auto-snapshot on set CHANGE** (the core ask — *auto-update when a new set LOADS, not just on the
+    manual Refresh*): the feeder (already polling `get_scene_info` every 300 ms) computes a fingerprint
+    each tick; when it CHANGES (a different set opened/closed), it emits an `ableton.snapshot` (auto) →
+    bridge → p5 **REPLACES** the rows with fresh defaults (all random), discarding the closed set's
+    stale data. No new polling. Manual Refresh still works. (Schema: add `signature` to `AbletonSnapshot`
+    + `setSignature` to `AbletonMapping`; `mergeSnapshot` **replaces** — not merges — when the signature
+    differs; same signature → merge as today, preserving edits.)
+  - **Presets**: each saved mapping carries its `setSignature` + a user `name`; panel gets Save /
+    Load ▾ / **Rename** / Delete; the Load list flags presets matching the current set. `mappingStore`
+    gains rename + delete. **No auto-load** — explicit only.
+  - **Test sets** (self-contained Collect-All projects in `demo/ableton/`): **ADE_Sleuth** ⇄ the NEW
+    **`Super_Colitis_new3_mastered Project`** — swap between them in Live; confirm the rows
+    auto-replace on load and never show the closed set's data.
+
+- ⬜ **Takeover / manual monome mode** (p5-only, self-contained — the cleaner first build). A clear
+  **MANUAL ⇄ TAKEOVER toggle in the monome twin dashboard** (`ui/monomeTwin.ts`). In TAKEOVER,
+  Lichtspiel auto-drives the monome so the performer's hands are free (e.g. launch scenes from another
+  controller) while the animation keeps performing:
+  - A **tempo clock from Live's BPM** (`live.state.transport.tempo`/`isPlaying`, already arriving at
+    p5) generates synthetic monome gestures (encoder turns/presses, grid presses) → fed through the
+    SAME idiom layer (`host.dispatchGridKey/ArcDelta/ArcKey`) → drives the CURRENT sketch's params /
+    within-sketch actions (never switches templates) → twin + real LEDs reflect it. Audio-reactive-ish.
+  - Real monome input STAYS LIVE in takeover (blended) by default; MANUAL = today's behavior. v1 =
+    simple tempo-locked gestures (sweep encoders on the beat, press on the downbeat); iterate. Future:
+    drive from more Ableton state (clip/scene/device) beyond tempo.
+
+**Phase 5b latency track ⬜ (Goal A of the original brief; deferred — AFTER the refinements above)**
 
 The user noted **residual latency**. Two causes, don't conflate: scene-launch **quantization**
 (Live fires clips on the bar — a transport setting, not a bug; lower global launch-quant for
