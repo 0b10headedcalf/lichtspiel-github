@@ -356,27 +356,32 @@ After the in-Live build, the user asked for three refinements first (latency →
   manual/default-BPM fallback + the twin's −/+ make it demonstrable standalone. Gates green (typecheck ·
   smoke:p5 incl. takeover-smoke · build). Future: drive from more Ableton state (clip/scene/device).
 
-**Phase 5b latency track ⬜ (Goal A of the original brief; deferred — AFTER the refinements above)**
+**▶ Phase 5b latency track ⬜ — PLANNED, the chosen NEXT part (2026-06-05); user paused before
+answering the scope question. Full plan + the open decision: `~/.claude/plans/snug-nibbling-quail.md`
+("Phase 5b — LATENCY TRACK"). On resume, re-ask the scope question first.**
 
-The user noted **residual latency**. Two causes, don't conflate: scene-launch **quantization**
-(Live fires clips on the bar — a transport setting, not a bug; lower global launch-quant for
-snappier) vs the **feeder poll** (~300 ms + `get_scene_info` cost — the real code/perf target).
-Make the trigger path low-latency + sturdier; ranked, least-risky first:
+Two causes, don't conflate: scene-launch **quantization** (Live fires clips on the bar — a transport
+setting, not a bug; lower global launch-quant for snappier) vs the **feeder poll** (~300 ms +
+`get_scene_info` cost — the real code/perf target).
 
-1. ⬜ **Tighten the feeder** — split `apps/live-bridge/demo-feeder.mjs` into a fast trigger loop
-   (transport / playing-row / `back_to_arranger`, ~25–50 ms) + a slow snapshot loop (cues/scenes,
-   manual/occasional). Measure before/after. Likely the fastest win.
-2. ⬜ **Thin Remote Script direct-event sender** — a Lichtspiel runtime Remote Script that *observes*
-   scene/locator changes (listeners, not polling) and emits tiny localhost OSC/UDP straight to the
-   bridge, bypassing the MCP server. Lower latency + self-contained.
-3. ⬜ **AbletonOSC adapter** (evaluate) — `ideoforms/AbletonOSC` `start_listen` as an alt event source
-   → adapter into `scene.launched`/`locator.crossed`. Toggle-able, no disruption to the other paths.
-4. ⬜ **Native M4L observer rewrite** — replace the dead polling 2nd-outlet path with LiveAPI
-   observers (the self-contained, ableton-mcp-free deploy path; keep as a fallback).
-- ⬜ **Measurement** — turn the `visual.activated` ack + `max/tools/verify-phase5a.mjs` into a metrics
-  harness: median/p95 event→p5 latency, missed/dup triggers, source tag. Targets: locator p95
-  < 150 ms; 0 misses / 100. Refs: `docs/ableton-integration.md` "Trigger path" + the dossiers
-  `context_docs/deep-research-report (4)/(5).md`. A `docs/phase5b-latency.md` write-up lands with it.
+**Two findings from the 2026-06-05 exploration that reshaped the ranking below:**
+- **Locators are the only latency-critical path** — scenes are quantization-bound (musical/intended).
+- **Cue/locator crossings are NOT listenable in the LOM** (`current_song_time` isn't a listenable
+  property; no cue-trigger callback). So **observers can't help locators** — they're poll-based in every
+  path. ⇒ the locator win is a **light transport read polled fast**, NOT the observer rewrites.
+
+**Recommended plan (option 1 of the open decision):**
+1. ⬜ **Metrics harness first** (`max/tools/latency-harness.mjs`) — drive N locator crossings, measure
+   event→`visual.activated` latency (`activatedAt − wire ts`, both already stamped) + a feeder-computed
+   `detectedLagMs` (`(song_time − cue.time)/tempo`). Report p50/p95 + miss/dup. Targets: locator p95
+   < 150 ms; 0 miss / 100. Baseline before, compare after.
+2. ⬜ **Tighten the feeder** — add a light `get_transport` to the Remote Script (transport only, no
+   scene/cue/track enumeration; **needs an Ableton restart**) and split `demo-feeder.mjs` into a fast
+   ~50 ms loop (light read → locators + the `live.state` forward) + a slow ~300 ms loop (`get_scene_info`
+   → scene detect + set-change snapshot). Falls back to `get_scene_info` if `get_transport` is absent.
+- 🔕 **Deprioritized** (don't help locators): thin Remote-Script *observers*, the native M4L observer
+  rewrite. **Evaluate later** only if option 1 underperforms: AbletonOSC adapter (`ideoforms/AbletonOSC`).
+- A `docs/phase5b-latency.md` write-up lands with the work.
 - 🔭 Also still open in Phase 5: **name-based semantic retrieval** as a 3rd mode
   (`ml-service/retrieve.py` exists) + richer Ableton rules. ML/codegen = Phases 6–9.
 
