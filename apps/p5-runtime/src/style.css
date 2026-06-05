@@ -162,6 +162,26 @@ body {
   margin-top: 10px;
   max-width: 460px;
 }
+.twin-takeover {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.takeover-btn {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.takeover-btn.on {
+  background: rgba(255, 120, 90, 0.22);
+  border-color: rgba(255, 140, 90, 0.7);
+  color: #ffd0b0;
+}
+.takeover-readout {
+  font-size: 10px;
+  color: #9fb3c8;
+  min-width: 96px;
+}
 .twin-check {
   margin-top: 8px;
   font-size: 10px;

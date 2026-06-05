@@ -86,6 +86,14 @@ const PAD = 12;
 const GAP = 4;
 const RING_R = 40;
 
+/** Callbacks the twin invokes for takeover mode (the clock + manual BPM live in main). */
+export interface TwinHooks {
+  /** MANUAL ⇄ TAKEOVER toggled — `on` = takeover (auto-drive the monome). */
+  onTakeoverToggle?: (on: boolean) => void;
+  /** The manual (standalone) BPM was nudged. */
+  onManualBpm?: (bpm: number) => void;
+}
+
 export class MonomeTwin {
   private readonly root: HTMLElement;
   private readonly bus: AppBus;
@@ -129,17 +137,27 @@ export class MonomeTwin {
   private raf = 0;
   private pressed: { x: number; y: number } | null = null;
 
+  // takeover mode (Part 2): MANUAL ⇄ TAKEOVER toggle + tempo readout.
+  private takeoverBtn!: HTMLButtonElement;
+  private takeoverReadout!: HTMLElement;
+  private takeoverOn = false;
+  private takeoverBpm = 120;
+  private takeoverSource: 'live' | 'manual' = 'manual';
+  private readonly hooks: TwinHooks;
+
   constructor(
     root: HTMLElement,
     bus: AppBus,
     devices: MonomeDevices,
     onLedFrame?: (frame: LedFramePayload) => void,
+    hooks: TwinHooks = {},
   ) {
     this.root = root;
     this.bus = bus;
     this.devices = devices;
     this.setup = devices.active();
     this.onLedFrame = onLedFrame;
+    this.hooks = hooks;
     this.buildShell();
     this.subscribe();
     this.rebuild();
@@ -181,6 +199,26 @@ export class MonomeTwin {
     mk(this.arcBtns, '2', 'Arc 2', () => this.setArc(ARC_2));
     mk(this.arcBtns, '4', 'Arc 4', () => this.setArc(ARC_4));
 
+    // Takeover row (Part 2): MANUAL ⇄ TAKEOVER + tempo readout + manual-BPM nudge.
+    const takeoverRow = el('div', 'twin-takeover');
+    this.takeoverBtn = document.createElement('button');
+    this.takeoverBtn.className = 'emu-btn takeover-btn';
+    this.takeoverBtn.title = 'auto-drive the monome on a tempo clock (hands-free)';
+    this.takeoverBtn.addEventListener('click', () => this.hooks.onTakeoverToggle?.(!this.takeoverOn));
+    const bpmDown = document.createElement('button');
+    bpmDown.className = 'emu-btn';
+    bpmDown.textContent = '−';
+    bpmDown.title = 'manual BPM −5 (standalone — live tempo overrides)';
+    bpmDown.addEventListener('click', () => this.hooks.onManualBpm?.(this.takeoverBpm - 5));
+    this.takeoverReadout = el('span', 'takeover-readout');
+    const bpmUp = document.createElement('button');
+    bpmUp.className = 'emu-btn';
+    bpmUp.textContent = '+';
+    bpmUp.title = 'manual BPM +5 (standalone — live tempo overrides)';
+    bpmUp.addEventListener('click', () => this.hooks.onManualBpm?.(this.takeoverBpm + 5));
+    takeoverRow.append(this.takeoverBtn, bpmDown, this.takeoverReadout, bpmUp);
+    this.renderTakeover();
+
     this.capsEl = el('div', 'twin-caps');
 
     this.canvas = document.createElement('canvas');
@@ -207,7 +245,21 @@ export class MonomeTwin {
     this.checklistEl = el('div', 'twin-check');
     this.logEl = el('div', 'twin-log');
 
-    this.root.append(this.label, sw, this.capsEl, this.canvas, testbar, this.checklistEl, this.logEl);
+    this.root.append(this.label, sw, takeoverRow, this.capsEl, this.canvas, testbar, this.checklistEl, this.logEl);
+  }
+
+  /** Reflect the takeover clock's state (main owns the clock + tempo source). */
+  setTakeoverState(s: { enabled: boolean; bpm: number; hasTransport: boolean }): void {
+    this.takeoverOn = s.enabled;
+    this.takeoverBpm = Math.round(s.bpm);
+    this.takeoverSource = s.hasTransport ? 'live' : 'manual';
+    this.renderTakeover();
+  }
+
+  private renderTakeover(): void {
+    this.takeoverBtn.textContent = this.takeoverOn ? '◉ TAKEOVER' : 'MANUAL';
+    this.takeoverBtn.classList.toggle('on', this.takeoverOn);
+    this.takeoverReadout.textContent = `${this.takeoverBpm} BPM · ${this.takeoverSource}`;
   }
 
   // The manual switch only *simulates* (no-hardware mode). Real hardware always

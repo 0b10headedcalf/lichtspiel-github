@@ -52,6 +52,26 @@ function setFingerprint(si) {
   return (h >>> 0).toString(36);
 }
 
+/** A valid LiveSessionState carrying just the transport (BPM / play-state /
+ * song position) from get_scene_info; the rest is the canonical empty default.
+ * Forwarded each poll so the p5 takeover clock can follow Live's tempo without a
+ * constant pulse. Reuses the existing live.state wire path (the bridge validates +
+ * routes it to p5 — no bridge/schema change). */
+function liveState(si) {
+  const tempo = (typeof si.tempo === 'number' && si.tempo > 0) ? si.tempo : 120;
+  const beat = (typeof si.current_song_time === 'number') ? si.current_song_time : 0;
+  return {
+    type: 'live_session_state',
+    version: '0.1.0',
+    timestampMs: Date.now(),
+    transport: { isPlaying: !!si.is_playing, tempo, beat, bar: Math.floor(beat / 4) },
+    selection: { trackIndex: 0, trackName: '', sceneIndex: 0, sceneName: '', clipSlotIndex: 0, clipName: '', clipColor: '', clipType: 'unknown' },
+    clip: { lengthBeats: 0, loopStart: 0, loopEnd: 0, isLooping: true, audioFilePath: null, midiSummary: null },
+    devices: [],
+    performance: { sceneLocked: false, manualOverride: false, semanticDistance: 0, mutationAmount: 0 },
+  };
+}
+
 async function tick() {
   if (busy) return;
   busy = true;
@@ -70,6 +90,8 @@ async function tick() {
         fire('ableton.snapshotRequest', {});
         console.log('[feeder] set change -> ableton.snapshotRequest', sig);
       }
+      // Transport forward (Part 2) — every poll, so the takeover clock follows Live's BPM.
+      fire('live.state', liveState(si));
       if (!si.is_playing) {
         lastT = -1; lastScene = -1; // stopped
       } else if (si.back_to_arranger) {

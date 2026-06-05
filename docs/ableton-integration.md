@@ -205,6 +205,14 @@ field added to the Remote Script's `get_scene_info` — loads on the next Ableto
 > re-snapshots + stamps the canonical `signature` + broadcasts `ableton.snapshot` → p5 replaces
 > the mapping rows with fresh defaults. **No new polling**, no Remote-Script change — it reuses
 > the read the feeder already does. See `docs/ableton-mapping-ui.md` (Set-awareness + presets).
+>
+> **Part 2 — transport forward (takeover mode).** The feeder also emits a `live.state` message each
+> poll, carrying just the transport (`tempo`/`is_playing`/`current_song_time` → `beat`) from the same
+> `get_scene_info` read (the rest is the canonical empty `LiveSessionState`). Reuses the existing
+> `live.state` wire path (bridge validates + routes; no bridge/schema change) so the p5 **takeover
+> clock** can follow Live's BPM with no constant pulse. (The dead M4L `/state` outlet was the only
+> other `live.state` source; the feeder makes it flow in the adopted runtime + lights the HUD.)
+> See `docs/monome.md` (Takeover mode).
 
 **C. Native event-driven** (the ideal, not built). Rewrite the M4L `js` to use LiveAPI
 **observers** (callbacks on change, no polling) → near-instant, self-contained, no

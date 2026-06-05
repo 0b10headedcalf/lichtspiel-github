@@ -258,6 +258,28 @@ tilt z → cameraDepth). Not modeled as an input event yet — add a `tilt` even
   range, parameter amount, A/B morph, global motion + density. enc0/enc1 are
   the two macros (vs four independent lanes on an Arc 4).
 
+## Takeover mode (Phase 5b refinements, Part 2)
+
+A **MANUAL ⇄ TAKEOVER** toggle in the monome twin (`ui/monomeTwin.ts`, the row under
+the size switch) lets Lichtspiel **auto-drive the monome on a tempo clock** so the
+performer's hands are free (e.g. to launch scenes from another controller) while the
+animation keeps performing. MANUAL = today's behaviour.
+
+- **The clock** (`apps/p5-runtime/src/live/takeoverClock.ts`, pure + smoke-tested) is a
+  local beat generator. In TAKEOVER it emits synthetic monome gestures — an **encoder
+  sweep every beat** (cycling encoders, direction flipping each bar so params oscillate
+  in range), and on the **downbeat** an arc press + a walking grid tap — **profile-adaptive**
+  (no arc events with no arc; cells clamped to the grid).
+- The events are emitted on the **same bus real input uses** (`monome.grid` / `monome.arcDelta`
+  / `monome.arcKey`), so they drive the **current sketch's idioms** exactly like a performer
+  and the twin + hardware LEDs reflect them. It **never switches templates**. Real input stays
+  **live (blended)**.
+- **Tempo, no constant pulse needed:** the clock follows **BPM + isPlaying** (+ song position to
+  phase-align to Live's bars), sourced from the **feeder's `live.state` transport forward** (the
+  300 ms `get_scene_info` poll already carries `tempo`). With no transport it free-runs at a
+  **manual BPM** (the twin's `−/+`), so it's demonstrable standalone. The readout shows
+  `<bpm> BPM · live|manual`.
+
 ## Sources
 
 - Grid editions — https://monome.org/docs/grid/editions/

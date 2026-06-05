@@ -12,6 +12,7 @@ import {
   type AbletonSnapshot,
   type LedFramePayload,
   type MappingPresetInfo,
+  type MonomeEvent,
   type NumericParamKey,
   type VisualParamVector,
   ADE_SLEUTH_SNAPSHOT,
@@ -40,6 +41,7 @@ import {
   resolveActivation,
 } from './live/abletonRetrieval.js';
 import { mergeSnapshot, parseMapping } from './live/abletonMappings.js';
+import { TakeoverClock } from './live/takeoverClock.js';
 import { AbletonMappingPanel } from './ui/abletonMappingPanel.js';
 import { createRng, randomSeed } from './seededRng.js';
 import type { VisualTemplate } from './visualTemplate.js';
@@ -71,7 +73,29 @@ const wsUrl = `ws://${__BIND_HOST__}:${__BRIDGE_WS_PORT__}`;
 const bridge = new BridgeClient({ url: wsUrl, bus });
 const sendLedFrame = (payload: LedFramePayload): void => bridge.send(wire('led.frame', payload));
 
-const twin = new MonomeTwin(twinEl, bus, devices, sendLedFrame);
+// Takeover clock (Part 2): in TAKEOVER it auto-drives the monome on a tempo clock
+// (BPM from Live via the feeder, or a manual fallback) so the animation keeps
+// performing hands-free. Off by default = MANUAL (today's behavior). Its events go
+// through the SAME bus real input uses (see emitMonome), never switching templates.
+const takeover = new TakeoverClock();
+const twin = new MonomeTwin(twinEl, bus, devices, sendLedFrame, {
+  onTakeoverToggle: (on) => {
+    takeover.setEnabled(on);
+    syncTakeover();
+  },
+  onManualBpm: (bpm) => {
+    takeover.setManualBpm(bpm);
+    syncTakeover();
+  },
+});
+takeover.setProfile(devices.active());
+function syncTakeover(): void {
+  twin.setTakeoverState({
+    enabled: takeover.isEnabled(),
+    bpm: takeover.bpm(),
+    hasTransport: takeover.hasTransport(),
+  });
+}
 
 const host = new SketchHost({
   parent: stage,
@@ -311,6 +335,14 @@ bus.on('params.patch', (patch) => host.setTargetParams(patch));
 bus.on('live.state', (state) => {
   host.setLive(state);
   debug.setLive(state); // visible confirmation of the M4L → bridge → p5 path
+  // Feed the takeover clock Live's tempo/play-state/position (from the feeder's
+  // transport forward) — it follows the BPM with no constant pulse needed.
+  takeover.setTransport({
+    tempo: state.transport.tempo,
+    isPlaying: state.transport.isPlaying,
+    beat: state.transport.beat,
+  });
+  syncTakeover();
 });
 
 // Phase 5a — Ableton auto-retrieval. A Session scene launch or an Arrangement
@@ -426,6 +458,20 @@ bus.on('monome.arcKey', (e) => {
   panel.setControlMap(host.describeControls());
 });
 
+// Takeover (Part 2): the clock's synthetic gestures are emitted on the SAME bus
+// the real monome uses, so they drive the current sketch's idioms (and the twin +
+// hardware LEDs reflect them) exactly like a performer — but never switch templates.
+// Real input stays live (blended). Ticked ~33 Hz; idle until the twin's TAKEOVER
+// toggle enables the clock.
+function emitMonome(e: MonomeEvent): void {
+  if (e.type === 'grid.key') bus.emit('monome.grid', e);
+  else if (e.type === 'arc.delta') bus.emit('monome.arcDelta', e);
+  else bus.emit('monome.arcKey', e);
+}
+setInterval(() => {
+  for (const e of takeover.tick(performance.now())) emitMonome(e);
+}, 30);
+
 // Device detection → adapt. Real hardware (serialosc device.attached/detached)
 // and the twin's manual switch (monome.setup → simulation) both flow through the
 // authoritative `devices` model; real hardware always wins. One subscriber
@@ -436,6 +482,7 @@ bus.on('monome.setup', (s) => devices.setSimulated(s));
 devices.onChange((active, src) => {
   twin.setSetup(active);
   host.setProfile(active); // hot-swap: reshape the active sketch's idioms in place
+  takeover.setProfile(active); // takeover gestures adapt to the new grid/arc too
   panel.setControlMap(host.describeControls()); // re-render the panel for the new hardware
   console.info(`[lichtspiel] monome (${src}) → ${describeSetup(active)}`);
 });

@@ -343,17 +343,18 @@ After the in-Live build, the user asked for three refinements first (latency →
     **`Super_Colitis_new3_mastered Project_v2`** (`Super_Colitis_new3_mastered_v2.als`) — swap between
     them in Live; confirm the rows auto-replace on load and never show the closed set's data.
 
-- ⬜ **Takeover / manual monome mode** (p5-only, self-contained — the cleaner first build). A clear
-  **MANUAL ⇄ TAKEOVER toggle in the monome twin dashboard** (`ui/monomeTwin.ts`). In TAKEOVER,
-  Lichtspiel auto-drives the monome so the performer's hands are free (e.g. launch scenes from another
-  controller) while the animation keeps performing:
-  - A **tempo clock from Live's BPM** (`live.state.transport.tempo`/`isPlaying`, already arriving at
-    p5) generates synthetic monome gestures (encoder turns/presses, grid presses) → fed through the
-    SAME idiom layer (`host.dispatchGridKey/ArcDelta/ArcKey`) → drives the CURRENT sketch's params /
-    within-sketch actions (never switches templates) → twin + real LEDs reflect it. Audio-reactive-ish.
-  - Real monome input STAYS LIVE in takeover (blended) by default; MANUAL = today's behavior. v1 =
-    simple tempo-locked gestures (sweep encoders on the beat, press on the downbeat); iterate. Future:
-    drive from more Ableton state (clip/scene/device) beyond tempo.
+- 🟦 **Takeover / manual monome mode — BUILT + headless-verified (awaiting hardware checkpoint).**
+  A clear **MANUAL ⇄ TAKEOVER toggle in the monome twin** (`ui/monomeTwin.ts`) + a tempo/source
+  readout + a manual-BPM nudge. In TAKEOVER, a **local beat clock** (`live/takeoverClock.ts`, pure +
+  smoke-tested, 15 checks) generates synthetic monome gestures (encoder sweeps on the beat, presses on
+  the downbeat, walking grid taps) → emitted on the SAME bus real input uses → the CURRENT sketch's
+  idioms react (never switches templates) → twin + real LEDs reflect it. Real input stays live
+  (blended). **Tempo source (the resolved question):** the clock needs only BPM + isPlaying (+
+  song-time to phase-align) — **NO constant pulse**. The **feeder forwards transport from its existing
+  `get_scene_info` poll** (which already returns `tempo`/`is_playing`/`current_song_time` — verified
+  live, real 120 BPM) via the existing `live.state` wire path (zero bridge/schema change); a
+  manual/default-BPM fallback + the twin's −/+ make it demonstrable standalone. Gates green (typecheck ·
+  smoke:p5 incl. takeover-smoke · build). Future: drive from more Ableton state (clip/scene/device).
 
 **Phase 5b latency track ⬜ (Goal A of the original brief; deferred — AFTER the refinements above)**
 
