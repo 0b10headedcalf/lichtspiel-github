@@ -356,9 +356,23 @@ After the in-Live build, the user asked for three refinements first (latency →
   manual/default-BPM fallback + the twin's −/+ make it demonstrable standalone. Gates green (typecheck ·
   smoke:p5 incl. takeover-smoke · build). Future: drive from more Ableton state (clip/scene/device).
 
-**▶ Phase 5b latency track ⬜ — PLANNED, the chosen NEXT part (2026-06-05); user paused before
-answering the scope question. Full plan + the open decision: `~/.claude/plans/snug-nibbling-quail.md`
-("Phase 5b — LATENCY TRACK"). On resume, re-ask the scope question first.**
+**▶▶ NEXT DIRECTION (2026-06-05): GENERATIVE TRACK — "Discovery → Generate" ⬜ (planned; build in a
+fresh context).** The user pivoted: the latency track below is **DEPRIORITIZED**; the next direction is
+the original generative vision — a UI **"Generate"** that synthesizes new, musically-informed p5 idioms.
+- **Discovery** ("learn the set"): a background pass → master audio (BlackHole loopback + manual-export
+  fallback) → **CLAP** embedding + zero-shot tags + **librosa** MIR (+ optional **LP-MusicCaps** caption)
+  → a persisted **"musical mental model"** JSON keyed by the set fingerprint.
+- **Generate**: that model (+ a prompt or "surprise" + a divergence slider) conditions **Claude
+  (structured-output codegen, build-time only)** to write a new idiom against our template DSL → validate
+  (tsc + ESLint allowlist + Playwright smoke + 2–3-pass self-repair) → load → save as a preset. Low
+  divergence = mutation (reuse the variant system); high = a novel template. **Runtime stays LLM-free.**
+- **POC-first** (G0 offline: metadata+MIDI → generate→validate→load) → G1 Discovery → G2 mutation → G3
+  novel → G4 per-section. **Full architecture + handoff:** `docs/generative-architecture.md` +
+  `~/.claude/plans/snug-nibbling-quail.md` ("GENERATIVE TRACK") + [[project_lichtspiel]] memory.
+
+**Phase 5b latency track 🔕 — DEPRIORITIZED (2026-06-05; superseded as "next" by the Generative track
+above). Kept documented; resume only if generation stalls. Full plan + open scope question:
+`~/.claude/plans/snug-nibbling-quail.md` ("Phase 5b — LATENCY TRACK").**
 
 Two causes, don't conflate: scene-launch **quantization** (Live fires clips on the bar — a transport
 setting, not a bug; lower global launch-quant for snappier) vs the **feeder poll** (~300 ms +
