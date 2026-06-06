@@ -55,4 +55,6 @@ context_docs/
 # `git add -f` a specific file to share a preset)
 config/ableton-mappings/
 
-apps/dekstop/src-tauri/target
+# Rust build artifacts — match target/ anywhere under any tauri crate
+apps/desktop/src-tauri/target/
+**/target/
