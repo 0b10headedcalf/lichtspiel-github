@@ -13,13 +13,16 @@
     "dev:p5": "pnpm --filter @lichtspiel/p5-runtime dev",
     "dev:bridge": "pnpm --filter @lichtspiel/live-bridge dev",
     "dev:feeder": "node apps/live-bridge/demo-feeder.mjs",
+    "dev:desktop": "pnpm --filter @lichtspiel/desktop tauri dev",
     "build": "pnpm -r build",
+    "build:desktop": "pnpm --filter @lichtspiel/desktop tauri build",
     "typecheck": "pnpm -r --no-bail typecheck",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "validate:schemas": "pnpm --filter @lichtspiel/schemas validate",
     "smoke:p5": "pnpm --filter @lichtspiel/p5-runtime smoke",
-    "send": "pnpm --filter @lichtspiel/live-bridge cli"
+    "send": "pnpm --filter @lichtspiel/live-bridge cli",
+    "generate:manifests": "npx tsx scripts/generate-manifests.ts"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

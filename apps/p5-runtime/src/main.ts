@@ -32,6 +32,7 @@ import { DebugPanel } from './ui/debugPanel.js';
 import { MonomeTwin } from './ui/monomeTwin.js';
 import { GesturalPanel } from './ui/gesturalPanel.js';
 import { BridgeClient } from './transport/bridgeClient.js';
+import { TauriClient, isTauri } from './transport/tauriClient.js';
 import { randomizeParams, mutateParams } from './mutations/paramMutation.js';
 import { createVariantBrowser } from './mutations/variantBrowser.js';
 import {
@@ -69,8 +70,13 @@ const debug = new DebugPanel(hud, hudHelp);
 // LED frames to it. The connection is opened at the very end, once every bus
 // handler is registered. Forwarding a led.frame reaches real monome hardware via
 // the bridge's serialosc layer (and is a no-op in browser-only mode).
+//
+// Transport abstraction: Tauri IPC when running in the desktop shell,
+// WebSocket when running in a browser. Both implement { connect(), send(), close() }.
 const wsUrl = `ws://${__BIND_HOST__}:${__BRIDGE_WS_PORT__}`;
-const bridge = new BridgeClient({ url: wsUrl, bus });
+const bridge = isTauri()
+  ? new TauriClient({ bus })
+  : new BridgeClient({ url: wsUrl, bus });
 const sendLedFrame = (payload: LedFramePayload): void => bridge.send(wire('led.frame', payload));
 
 // Takeover clock (Part 2): in TAKEOVER it auto-drives the monome on a tempo clock
@@ -583,7 +589,8 @@ installKeyboard({
 
 // ── Optional bridge connection ───────────────────────────────────────
 // (bridge + wsUrl are created above so the twin + host can forward LED frames.)
-bridge.connect();
+// TauriClient.connect() is async; BridgeClient.connect() is sync (returns void).
+void Promise.resolve(bridge.connect());
 
 // ── Dev profiler ─────────────────────────────────────────────────────
 // Diagnostic only (never on the performance path). Run from the console with

@@ -1,6 +1,7 @@
 packages:
   - 'apps/p5-runtime'
   - 'apps/live-bridge'
+  - 'apps/desktop'
   - 'packages/*'
 allowBuilds:
   esbuild: true

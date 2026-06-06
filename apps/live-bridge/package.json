@@ -16,7 +16,8 @@
     "test": "tsx src/selftest.ts",
     "test:osc": "tsx src/osc-selftest.ts",
     "test:serialosc": "tsx src/serialosc-selftest.ts",
-    "test:mapping": "tsx src/mapping-selftest.ts"
+    "test:mapping": "tsx src/mapping-selftest.ts",
+    "bench": "tsx src/bench.ts"
   },
   "dependencies": {
     "@lichtspiel/schemas": "workspace:*",
