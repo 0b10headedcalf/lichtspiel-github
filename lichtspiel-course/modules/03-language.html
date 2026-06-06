@@ -1,0 +1,194 @@
+    <section class="module" id="module-3" style="background: var(--color-bg-warm)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">03</span>
+          <h1 class="module-title">The Shared Language</h1>
+          <p class="module-subtitle">Five programs, written in three languages, on two devices — yet they collaborate perfectly. The secret is one tiny, strict, shared vocabulary.</p>
+        </header>
+
+        <div class="module-body">
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The metaphor: shipping containers</h2>
+            <p>Before the 1950s, loading a ship meant manually wrestling barrels, crates,
+              and sacks of every shape. Then someone standardized the <em>box</em>: one
+              steel container size that every crane, truck, train, and ship could handle —
+              without ever caring what's inside.</p>
+            <p>Lichtspiel's actors agreed on the same trick. They don't pass around
+              freeform data. They pass <strong>standard containers</strong>. Any actor can
+              handle one without knowing who packed it.</p>
+
+            <div class="callout callout-accent">
+              <div class="callout-icon">📦</div>
+              <div class="callout-content">
+                <strong class="callout-title">The vocabulary: a "schema" / "contract"</strong>
+                <p>A <span class="term" data-definition="A schema is a written rule for the exact shape data must take — which fields exist, what type each is. It's a contract every program agrees to follow so they can trust each other's data.">schema</span> is the agreed-upon shape of a container. All of Lichtspiel's schemas live in one shared folder — <code>packages/schemas</code> — described in the code as "the single source of truth." Define it once; everyone imports it; nobody redefines it.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Container #1: the dashboard of dials</h2>
+            <p>The most important container is the <strong>VisualParamVector</strong> —
+              think of it as a standard dashboard with sixteen labelled dials. Every
+              visual understands these same dials. Here are some of them:</p>
+
+            <div class="pattern-cards stagger-children">
+              <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-1)">
+                <div class="pattern-icon" style="background: var(--color-actor-1)">🌪️</div>
+                <h4 class="pattern-title">density · motion · turbulence</h4>
+                <p class="pattern-desc">How busy, how fast, how chaotic the image is.</p>
+              </div>
+              <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-2)">
+                <div class="pattern-icon" style="background: var(--color-actor-2)">🎨</div>
+                <h4 class="pattern-title">palette · contrast · lineWeight</h4>
+                <p class="pattern-desc">Colour scheme and the "look" of the strokes.</p>
+              </div>
+              <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-4)">
+                <div class="pattern-icon" style="background: var(--color-actor-4)">📷</div>
+                <h4 class="pattern-title">cameraDepth · rotationX/Y/Z</h4>
+                <p class="pattern-desc">Where the virtual camera is and how it's turned.</p>
+              </div>
+              <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-actor-5)">
+                <div class="pattern-icon" style="background: var(--color-actor-5)">🧭</div>
+                <h4 class="pattern-title">semanticDistance · mutationAmount</h4>
+                <p class="pattern-desc">How far to roam from the current look, and how wild the changes get.</p>
+              </div>
+            </div>
+
+            <p style="margin-top: var(--space-6)">Here's the actual container definition,
+              with its sensible "middle" defaults — this is exactly what's in the code:</p>
+
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-line"><span class="code-keyword">export const</span> DEFAULT_PARAMS: VisualParamVector = Object.<span class="code-function">freeze</span>({</span>
+<span class="code-line">  <span class="code-property">sceneId</span>: <span class="code-string">'minimalPulse'</span>,</span>
+<span class="code-line">  <span class="code-property">density</span>: <span class="code-number">0.5</span>,</span>
+<span class="code-line">  <span class="code-property">motion</span>: <span class="code-number">0.5</span>,</span>
+<span class="code-line">  <span class="code-property">turbulence</span>: <span class="code-number">0.5</span>,</span>
+<span class="code-line">  <span class="code-property">symmetry</span>: <span class="code-number">0.5</span>,</span>
+<span class="code-line">  <span class="code-property">strobe</span>: <span class="code-number">0.0</span>,</span>
+<span class="code-line">  <span class="code-comment">// ...ten more dials, all 0..1...</span></span>
+<span class="code-line">});</span></code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">PLAIN ENGLISH</span>
+                <div class="translation-lines">
+                  <p class="tl">Define the standard dashboard and "freeze" it so nobody can secretly change the template.</p>
+                  <p class="tl"><code>sceneId</code> is the one text field — it names which visual this dashboard is for.</p>
+                  <p class="tl">Every other field is a number starting at a neutral middle (0.5) or off (0.0)...</p>
+                  <p class="tl">...so a fresh visual always boots up looking reasonable, before you touch a single knob.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The one rule that prevents chaos: 0 to 1</h2>
+            <p>Every dial is a number between <strong>0 and 1</strong>. Not 0–100, not
+              0–255, not "low/medium/high." Just 0 to 1. This single convention means a
+              knob, a song's tempo, and an AI suggestion can all drive the same dial
+              without unit confusion.</p>
+            <p>And the code <em>enforces</em> it. Any value that wanders out of bounds
+              gets snapped back:</p>
+
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-line"><span class="code-keyword">export function</span> <span class="code-function">clamp01</span>(x: <span class="code-keyword">number</span>): <span class="code-keyword">number</span> {</span>
+<span class="code-line">  <span class="code-keyword">if</span> (Number.<span class="code-function">isNaN</span>(x)) <span class="code-keyword">return</span> <span class="code-number">0</span>;</span>
+<span class="code-line">  <span class="code-keyword">if</span> (x &lt; <span class="code-number">0</span>) <span class="code-keyword">return</span> <span class="code-number">0</span>;</span>
+<span class="code-line">  <span class="code-keyword">if</span> (x > <span class="code-number">1</span>) <span class="code-keyword">return</span> <span class="code-number">1</span>;</span>
+<span class="code-line">  <span class="code-keyword">return</span> x;</span>
+<span class="code-line">}</span></code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">PLAIN ENGLISH</span>
+                <div class="translation-lines">
+                  <p class="tl">Take any number and force it into the 0-to-1 range.</p>
+                  <p class="tl">If it's broken ("not a number"), treat it as 0 — never let garbage through.</p>
+                  <p class="tl">Below 0? Snap up to 0. Above 1? Snap down to 1.</p>
+                  <p class="tl">Otherwise it's already valid — pass it through unchanged.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="callout callout-info">
+              <div class="callout-icon">🛡️</div>
+              <div class="callout-content">
+                <strong class="callout-title">This is "defensive programming"</strong>
+                <p>Tiny guard functions like <code>clamp01</code> are how robust software stays robust. Instead of <em>hoping</em> every caller behaves, the value is sanitized at the door. When you ask an AI to "make this bulletproof," asking it to "clamp and validate inputs" is exactly the kind of precise instruction that pays off.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Container #2: the shipping label</h2>
+            <p>Containers also need a <em>label</em> so the dispatcher knows what they
+              are and what to do with them. Every message between actors carries the same
+              four-part label, called the <span class="term" data-definition="A wire protocol is the agreed-upon format for messages sent between programs over a connection ('the wire'). It defines exactly how each message is structured so both sides understand it.">wire protocol</span>:</p>
+
+            <div class="badge-list stagger-children">
+              <div class="badge-item animate-in"><code class="badge-code">v</code><span class="badge-desc">Version number — so old and new actors don't misread each other.</span></div>
+              <div class="badge-item animate-in"><code class="badge-code">ts</code><span class="badge-desc">Timestamp — exactly when it was sent.</span></div>
+              <div class="badge-item animate-in"><code class="badge-code">type</code><span class="badge-desc">What kind of message: "params.update", "scene.select", "monome.event"…</span></div>
+              <div class="badge-item animate-in"><code class="badge-code">payload</code><span class="badge-desc">The actual cargo — e.g. the dashboard of dials.</span></div>
+            </div>
+
+            <p style="margin-top: var(--space-6)">In the code, every possible message is
+              one labelled line. Here's the one for a dial change:</p>
+
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-line">| { v: <span class="code-number">1</span>; ts: <span class="code-keyword">number</span>; type: <span class="code-string">'params.update'</span>; payload: Partial&lt;VisualParamVector> }</span></code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">PLAIN ENGLISH</span>
+                <div class="translation-lines">
+                  <p class="tl">"A valid message can be: version 1, a timestamp, type <code>params.update</code>, carrying <em>some</em> of the dials." (<code>Partial</code> = you don't have to send all sixteen — just the ones that changed.)</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Check your intuition</h2>
+            <div class="quiz-container" id="quiz-module3">
+              <div class="quiz-question-block"
+                   data-correct="opt-b"
+                   data-explanation-right="Right. Because every dial is 0–1, the knob and the tempo just need to produce a 0–1 value — neither has to know the other exists or what units the other uses. That's the whole payoff of normalizing."
+                   data-explanation-wrong="Think about the 0-to-1 rule. If a knob outputs 0–1 and a tempo is converted to 0–1, they're already speaking the same units — no special translation between them is needed.">
+                <h3 class="quiz-question">You want both a hardware knob <em>and</em> the song's tempo to be able to drive the "motion" dial. Why is this easy in Lichtspiel?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="opt-a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>You'd write custom converter code between the knob and the tempo.</span></button>
+                  <button class="quiz-option" data-value="opt-b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Both just produce a 0-to-1 value for the same dial — they never need to know about each other.</span></button>
+                  <button class="quiz-option" data-value="opt-c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Only one source can control a dial at a time, so there's nothing to reconcile.</span></button>
+                </div>
+                <div class="quiz-feedback"></div>
+              </div>
+
+              <div class="quiz-question-block"
+                   data-correct="opt-c"
+                   data-explanation-right="Exactly. The schemas folder is the 'single source of truth.' Redefining the shape elsewhere is how two parts of a system quietly drift out of sync — the classic bug that's miserable to find. Always import the shared definition."
+                   data-explanation-wrong="Re-read the container metaphor. The shared schemas folder exists precisely so the shape is defined once. Copy-pasting your own version is how the two copies silently disagree later.">
+                <h3 class="quiz-question">An AI assistant offers to "just add the param fields you need directly in the visual file." Why should that make you pause?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="opt-a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>It would run too slowly.</span></button>
+                  <button class="quiz-option" data-value="opt-b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Visual files aren't allowed to use numbers.</span></button>
+                  <button class="quiz-option" data-value="opt-c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The shape should be defined once in the shared schemas folder — a private copy will silently drift out of sync.</span></button>
+                </div>
+                <div class="quiz-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-module3')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module3')">Try Again</button>
+            </div>
+
+            <p style="margin-top: var(--space-8); color: var(--color-text-secondary)">Now that we know the containers, let's watch the dispatcher sort them. →</p>
+          </section>
+
+        </div>
+      </div>
+    </section>

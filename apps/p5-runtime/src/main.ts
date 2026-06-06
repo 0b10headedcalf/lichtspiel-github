@@ -585,9 +585,20 @@ installKeyboard({
 // (bridge + wsUrl are created above so the twin + host can forward LED frames.)
 bridge.connect();
 
+// ── Dev profiler ─────────────────────────────────────────────────────
+// Diagnostic only (never on the performance path). Run from the console with
+// `__lichtspielProfile()` or load with `?profile`. Lazy-imported so it's tree-
+// shaken out of normal sessions. See docs/perf-profiling.md.
+const runProfile = async (): Promise<void> => {
+  const { profileAll } = await import('./profile/profiler.js');
+  await profileAll(host, registry);
+};
+(window as unknown as { __lichtspielProfile: () => Promise<void> }).__lichtspielProfile = runProfile;
+
 // ── Boot ─────────────────────────────────────────────────────────────
 const first = registry.at(0);
 if (first) selectScene(first, true); // mount via the browser so the panel initializes
+if (new URLSearchParams(location.search).has('profile')) void runProfile();
 console.info(
   `[lichtspiel] p5 runtime up — ${registry.size} templates. ` +
     `Press 'd' HUD · 'g' twin · 'h' gestures · 'a' Ableton mapping · 'v/c/,/.' variants. ` +

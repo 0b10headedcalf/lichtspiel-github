@@ -1,0 +1,200 @@
+    <section class="module" id="module-6" style="background: var(--color-bg)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">06</span>
+          <h1 class="module-title">When It Breaks</h1>
+          <p class="module-subtitle">It's a live performance — a USB cable <em>will</em> wiggle loose mid-show. The most interesting engineering in Lichtspiel is what happens when something fails and the show stays up anyway.</p>
+        </header>
+
+        <div class="module-body">
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The metaphor: limp-home mode</h2>
+            <p>When a sensor fails in a modern car, the engine doesn't just die on the
+              motorway. It drops into <em>limp-home mode</em>: reduced power, fewer
+              features, but it still drives you to a garage. Failing <strong>gracefully</strong>
+              beats failing <strong>completely</strong>.</p>
+            <p>Lichtspiel is built entirely around this idea. The project documents call it
+              "why the demo stays up." Every fancy layer can fall away, and a simpler one
+              keeps the visuals running.</p>
+
+            <div class="step-cards stagger-children">
+              <div class="step-card animate-in"><div class="step-num">1</div><div class="step-body"><strong>Ableton disconnects?</strong><p>The visuals keep going — you can still drive everything from the keyboard and the controller.</p></div></div>
+              <div class="step-card animate-in"><div class="step-num">2</div><div class="step-body"><strong>The bridge dies?</strong><p>The visual engine runs fully on its own in the browser — no bridge, no Ableton, no AI needed.</p></div></div>
+              <div class="step-card animate-in"><div class="step-num">3</div><div class="step-body"><strong>The bridge comes back?</strong><p>The visuals notice and silently reconnect. No restart, no refresh.</p></div></div>
+            </div>
+
+            <div class="callout callout-accent">
+              <div class="callout-icon">💡</div>
+              <div class="callout-content">
+                <strong class="callout-title">The vocabulary: "graceful degradation"</strong>
+                <p><span class="term" data-definition="Graceful degradation means an app keeps working in a reduced form when a part fails, instead of crashing entirely. A video site dropping to lower quality on a weak connection — rather than freezing — is graceful degradation.">Graceful degradation</span> is a hallmark of production-quality software. When you ask an AI to build something "robust for a live demo," asking specifically for graceful degradation — "if the server is down, the page should still work read-only" — is far more precise than "make it reliable."</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Reconnecting, politely</h2>
+            <p>When the bridge vanishes, the visuals don't hammer it with reconnect
+              attempts. They wait a little, try, and if it fails, wait a bit
+              <em>longer</em> next time — up to a ceiling. This is real code from the
+              visual engine:</p>
+
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-line"><span class="code-keyword">private</span> <span class="code-function">scheduleReconnect</span>(): <span class="code-keyword">void</span> {</span>
+<span class="code-line">  <span class="code-keyword">const</span> delay = <span class="code-keyword">this</span>.reconnectMs;</span>
+<span class="code-line">  <span class="code-keyword">this</span>.reconnectMs = Math.<span class="code-function">min</span>(<span class="code-keyword">this</span>.reconnectMs * <span class="code-number">1.6</span>, <span class="code-number">10000</span>);</span>
+<span class="code-line">  window.<span class="code-function">setTimeout</span>(() => {</span>
+<span class="code-line">    <span class="code-keyword">if</span> (!<span class="code-keyword">this</span>.closed) <span class="code-keyword">this</span>.<span class="code-function">open</span>();</span>
+<span class="code-line">  }, delay);</span>
+<span class="code-line">}</span></code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">PLAIN ENGLISH</span>
+                <div class="translation-lines">
+                  <p class="tl">Schedule another attempt to reconnect.</p>
+                  <p class="tl">Wait the current delay (it starts at 1 second).</p>
+                  <p class="tl">Multiply the next wait by 1.6 — but never wait more than 10 seconds. Each failure backs off a little more.</p>
+                  <p class="tl">After the wait, if we haven't been deliberately shut down, try to open the connection again.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="callout callout-info">
+              <div class="callout-icon">⏳</div>
+              <div class="callout-content">
+                <strong class="callout-title">The vocabulary: "exponential backoff"</strong>
+                <p>Growing the wait time after each failure is called <span class="term" data-definition="Exponential backoff is a retry strategy where you wait longer after each failed attempt (e.g. 1s, then 1.6s, then 2.5s…). It avoids flooding a struggling server with rapid-fire retries.">exponential backoff</span>. Retrying instantly and forever would flood a struggling server and make things worse — backoff is the polite, standard fix. It's a great phrase to drop when asking an AI to handle flaky connections.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">War story: the temperamental knob controller</h2>
+            <p>Here's a real bug the team fought — and the kind of story that separates a
+              working demo from a flaky one. One of the performer's controllers (an Arc 4)
+              is a hand-built clone whose connection is fragile. The team learned three
+              rules the hard way:</p>
+
+            <div class="pattern-cards stagger-children">
+              <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-error)">
+                <div class="pattern-icon" style="background: var(--color-error)">🤐</div>
+                <h4 class="pattern-title">Talk less</h4>
+                <p class="pattern-desc">Sending light updates to all rings 30 times a second flooded the clone's connection and <em>disconnected it</em>. Fix: only send a light change when it actually changed.</p>
+              </div>
+              <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-error)">
+                <div class="pattern-icon" style="background: var(--color-error)">🧐</div>
+                <h4 class="pattern-title">Trust nothing</h4>
+                <p class="pattern-desc">The flaky device spat out a storm of "I'm here! / I'm gone!" notices. Reacting to each made it worse. Fix: ignore the storm and calmly poll "who's actually here?" on a timer.</p>
+              </div>
+              <div class="pattern-card animate-in" style="border-top: 3px solid var(--color-error)">
+                <div class="pattern-icon" style="background: var(--color-error)">🔌</div>
+                <h4 class="pattern-title">Power-cycle when stuck</h4>
+                <p class="pattern-desc">Sometimes the controller gets wedged — plugged in but invisible. The bridge detects this and restarts the controller service automatically. The software version of "turn it off and on again."</p>
+              </div>
+            </div>
+
+            <div class="callout callout-warning">
+              <div class="callout-icon">⚠️</div>
+              <div class="callout-content">
+                <strong class="callout-title">The lesson for steering AI</strong>
+                <p>An AI assistant will happily write "send all the LED updates every frame" — it looks correct and works on perfect hardware. The bug only appears with a flaky real device under load. <em>You</em> knowing to say "only send updates that changed — don't flood the device" is exactly the kind of intervention that rescues a demo. Real-world constraints are where human judgement still beats the autocomplete.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Spot the demo-killer</h2>
+            <p>Based on that war story — one of these four lines is the bug that crashed
+              the controller during the show. Which one? <span style="color: var(--color-text-muted); font-size: var(--text-sm)">(simplified illustration)</span></p>
+
+            <div class="bug-challenge">
+              <h3>Find the line that floods the fragile controller:</h3>
+              <div class="bug-code">
+                <div class="bug-line" data-line="1" onclick="checkBugLine(this, false)"><span class="line-num">1</span><code>everyFrame(() => {</code></div>
+                <div class="bug-line" data-line="2" onclick="checkBugLine(this, false)"><span class="line-num">2</span><code>  const frame = computeLedBrightness(params);</code></div>
+                <div class="bug-line bug-target" data-line="3" onclick="checkBugLine(this, true)"><span class="line-num">3</span><code>  device.sendAllRings(frame);  // always send, 30x/sec</code></div>
+                <div class="bug-line" data-line="4" onclick="checkBugLine(this, false)"><span class="line-num">4</span><code>});</code></div>
+              </div>
+              <div class="bug-feedback" id="bug-feedback"></div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">One more trick: reproducible randomness</h2>
+            <p>The visuals are full of randomness — flickers, scattered shapes, organic
+              drift. But "random" and "reproducible" sound like opposites. How do you
+              debug a glitch you can't recreate?</p>
+            <p>Lichtspiel routes all its randomness through a <strong>seeded</strong>
+              generator. Give it the same starting number (a "seed") and you get the exact
+              same "random" sequence every time — so the exact same visual.</p>
+
+            <div class="callout callout-accent">
+              <div class="callout-icon">🎲</div>
+              <div class="callout-content">
+                <strong class="callout-title">The vocabulary: a "seed" / "deterministic"</strong>
+                <p>A <span class="term" data-definition="A seed is the starting number for a random-number generator. The same seed always produces the same sequence of 'random' results — making randomness repeatable.">seed</span> makes randomness <span class="term" data-definition="Deterministic means the same inputs always produce the same outputs — no surprises. The opposite of random or unpredictable behaviour.">deterministic</span>. This is gold for debugging: "it only glitches sometimes" becomes "seed 4827 reliably reproduces the glitch." If you ever fight a bug that won't reproduce, asking an AI "can we seed the randomness so this is repeatable?" is a pro move.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Check your intuition</h2>
+            <div class="quiz-container" id="quiz-module6">
+              <div class="quiz-question-block"
+                   data-correct="opt-b"
+                   data-explanation-right="Exactly. Graceful degradation means the visual engine runs standalone in the browser. Losing the bridge or Ableton drops features, not the whole show — and it auto-reconnects when they return."
+                   data-explanation-wrong="Recall 'why the demo stays up.' The visual engine is designed to run fully on its own in the browser, so losing the bridge degrades features rather than killing the visuals.">
+                <h3 class="quiz-question">Mid-set, the bridge program crashes. What does the audience see?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="opt-a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>A black screen — everything depends on the bridge.</span></button>
+                  <button class="quiz-option" data-value="opt-b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>The visuals keep running in the browser; some features pause until the bridge reconnects.</span></button>
+                  <button class="quiz-option" data-value="opt-c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>An error dialog they have to dismiss.</span></button>
+                </div>
+                <div class="quiz-feedback"></div>
+              </div>
+
+              <div class="quiz-question-block"
+                   data-correct="opt-c"
+                   data-explanation-right="Right. Retrying instantly and forever piles load onto a service that's already struggling. Exponential backoff — wait a little longer after each failure — is the polite, standard way to reconnect without making things worse."
+                   data-explanation-wrong="Think about what happens to a struggling server if every client retries instantly, nonstop. That's a stampede. Backing off (waiting longer each time) is the fix — that's why the delay grows.">
+                <h3 class="quiz-question">An AI suggests "just retry the connection every 100 milliseconds until it works." Why might you push back?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="opt-a" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>100ms is too fast for any computer to handle.</span></button>
+                  <button class="quiz-option" data-value="opt-b" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Retrying is always a bad idea; just give up.</span></button>
+                  <button class="quiz-option" data-value="opt-c" onclick="selectOption(this)"><div class="quiz-option-radio"></div><span>Constant fast retries flood a struggling service — exponential backoff (waiting longer each time) is the robust approach.</span></button>
+                </div>
+                <div class="quiz-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-module6')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-module6')">Try Again</button>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">You've seen the whole machine</h2>
+            <p>From one twist of a knob, you followed the message through five specialist
+              actors, a shared container language, a sorting dispatcher, a self-adapting
+              instrument, and a system built to survive its own failures.</p>
+
+            <div class="icon-rows stagger-children">
+              <div class="icon-row animate-in"><div class="icon-circle" style="background: var(--color-actor-1)">🎯</div><div><strong>You can steer AI precisely</strong><p>"Fix it in the p5 runtime, not the bridge." "Clamp that input." "Add graceful degradation."</p></div></div>
+              <div class="icon-row animate-in"><div class="icon-circle" style="background: var(--color-actor-2)">🔍</div><div><strong>You can debug with intuition</strong><p>"It's not showing up" → check the bridge's routing by role. "Won't reproduce" → seed the randomness.</p></div></div>
+              <div class="icon-row animate-in"><div class="icon-circle" style="background: var(--color-actor-5)">🗣️</div><div><strong>You have the vocabulary</strong><p>Schema, broadcast, capability folding, exponential backoff, deterministic. The precise words that make instructions unambiguous.</p></div></div>
+            </div>
+
+            <div class="callout callout-accent">
+              <div class="callout-icon">🎬</div>
+              <div class="callout-content">
+                <strong class="callout-title">That's a wrap</strong>
+                <p>You don't need to write this code from scratch. But you can now read it, reason about it, and direct an AI to build something like it — with production-level judgement about where logic lives and what happens when things fail. That's the superpower.</p>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </section>

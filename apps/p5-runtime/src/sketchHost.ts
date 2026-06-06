@@ -47,6 +47,19 @@ export interface MountOptions {
   impl?: string;
 }
 
+/**
+ * One raw (un-smoothed) per-frame measurement, emitted to any attached sampler.
+ * `jsMs` is the synchronous main-thread cost of update()+draw() (CPU command
+ * building); `frameMs` is the wall-clock frame interval (CPU + GPU + vsync). The
+ * residual `frameMs - jsMs` is the GPU/vsync signal — see docs/perf-profiling.
+ */
+export interface FrameSample {
+  frameMs: number;
+  jsMs: number;
+  fps: number;
+  templateId: string;
+}
+
 export interface SketchHostOptions {
   parent: HTMLElement;
   /** Returns the desired canvas size; re-queried on window resize. */
@@ -86,6 +99,9 @@ export class SketchHost {
   private frame = 0;
   private fps = 0;
 
+  /** Raw per-frame samplers (the profiler attaches here); empty in normal use. */
+  private readonly samplers = new Set<(s: FrameSample) => void>();
+
   constructor(opts: SketchHostOptions) {
     this.parent = opts.parent;
     this.getSize = opts.getSize ?? (() => ({ width: window.innerWidth, height: window.innerHeight }));
@@ -124,6 +140,12 @@ export class SketchHost {
   }
   ledFrame(): LedFrame {
     return this.ledOut;
+  }
+
+  /** Attach a raw per-frame sampler (for the profiler). Returns a detach fn. */
+  addSampler(fn: (s: FrameSample) => void): () => void {
+    this.samplers.add(fn);
+    return () => this.samplers.delete(fn);
   }
 
   private teardown(): void {
@@ -230,6 +252,9 @@ export class SketchHost {
         const instantFps = dt > 0 ? 1 / dt : 0;
         this.fps = this.fps === 0 ? instantFps : this.fps * 0.9 + instantFps * 0.1;
 
+        // Synchronous main-thread cost of update()+draw() — CPU command building,
+        // not GPU execution (WebGL draw calls return before the GPU runs them).
+        const jsStart = performance.now();
         try {
           sketch.update(this.smoothed, this.live, dt);
         } catch (err) {
@@ -241,6 +266,7 @@ export class SketchHost {
         } catch (err) {
           console.error('[host] sketch.draw threw', err);
         }
+        const jsMs = performance.now() - jsStart;
 
         if (this.ledOut.gridDirty || this.ledOut.arcDirty.some((d) => d)) {
           this.onLedFrameDirty?.(this.ledOut);
@@ -249,6 +275,16 @@ export class SketchHost {
         }
 
         this.onFrame?.({ fps: this.fps, params: this.smoothed, templateId: this.template?.id ?? '' });
+
+        if (this.samplers.size > 0) {
+          const sample: FrameSample = {
+            frameMs: dt * 1000,
+            jsMs,
+            fps: instantFps,
+            templateId: this.template?.id ?? '',
+          };
+          for (const fn of this.samplers) fn(sample);
+        }
       };
     }, this.parent);
 
