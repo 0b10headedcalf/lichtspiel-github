@@ -59,3 +59,14 @@ context_docs/
 config/ableton-mappings/
 unvibeify/
 to-merge/
+
+# electron desktop (electron-builder output + bundled renderer/bridge)
+apps/desktop/release/
+apps/desktop/build/
+release/
+
+# MRT2 bridge — Magenta model weights + the isolated venv (real path only;
+# the default mock demo needs none of this). Keep them out of the repo.
+.venv-magenta/
+**/.venv-magenta/
+*.safetensors
