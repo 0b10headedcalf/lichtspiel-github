@@ -21,6 +21,10 @@ def load_dotenv() -> Path | None:
             env_file = directory / ".env"
             if env_file.is_file():
                 _apply(env_file)
+                # Record where .env lives so relative paths in it (e.g. the
+                # audio watch dir `demo/captures`) can resolve against the repo
+                # root rather than whatever cwd the service happens to run in.
+                os.environ.setdefault("LICHTSPIEL_ENV_ROOT", str(directory))
                 return env_file
     return None
 

@@ -254,6 +254,24 @@ body,
   display: block;
 }
 
+/* Lock badge — the Space-key lock suppresses every Ableton-driven swap, so it
+   must be loud: pinned bottom-center over the canvas, can't be missed. */
+.lock-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(180, 40, 40, 0.92);
+  color: #fff;
+  font: 600 13px/1.2 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 /* ── Mode bar (PLAN / PERFORM / ARRANGE) — top center ─────────────────
    Every chip keeps its mode's identity color at all times; the inactive ones
    are transparent/faded so the active mode is unmistakable at a glance.

@@ -22,22 +22,41 @@ function ableton(type, params = {}) {
   });
 }
 
+let lastSig = null; // set fingerprint (also reset on reconnect, below)
+
+// Bridge connection with auto-reconnect: the feeder is often started before the
+// bridge (or outlives a bridge restart), and a one-shot WebSocket left it
+// permanently deaf — events kept polling but never reached p5. Reconnect with
+// backoff, and reset lastSig on each (re)connect so the set snapshot re-broadcasts.
+let ws = null;
 let wsReady = false;
-const ws = new WebSocket('ws://127.0.0.1:7890');
-ws.on('open', () => {
-  ws.send(JSON.stringify({ v: 1, ts: Date.now(), type: 'hello', payload: { protocolVersion: 1, role: 'cli' } }));
-  wsReady = true;
-  console.log('[feeder] connected to bridge');
-});
-ws.on('error', (e) => console.error('[feeder] ws error', String(e)));
-function fire(type, payload) { if (wsReady && ws.readyState === 1) ws.send(JSON.stringify({ v: 1, ts: Date.now(), type, payload })); }
+let reconnectMs = 1000;
+function connectBridge() {
+  ws = new WebSocket('ws://127.0.0.1:7890');
+  ws.on('open', () => {
+    ws.send(JSON.stringify({ v: 1, ts: Date.now(), type: 'hello', payload: { protocolVersion: 1, role: 'cli' } }));
+    wsReady = true;
+    reconnectMs = 1000;
+    lastSig = null; // re-send the snapshot poke for the current set
+    console.log('[feeder] connected to bridge');
+  });
+  ws.on('close', () => {
+    if (wsReady) console.log('[feeder] bridge connection lost — reconnecting');
+    wsReady = false;
+    const delay = reconnectMs;
+    reconnectMs = Math.min(reconnectMs * 1.6, 10000);
+    setTimeout(connectBridge, delay);
+  });
+  ws.on('error', () => { /* close handler does the reconnect */ });
+}
+connectBridge();
+function fire(type, payload) { if (wsReady && ws && ws.readyState === 1) ws.send(JSON.stringify({ v: 1, ts: Date.now(), type, payload })); }
 
 let cues = [];
 let lastT = -1;
 let lastScene = -1;
 const SEEK_GUARD = 8;
 let busy = false;
-let lastSig = null;
 
 /** Cheap STRUCTURAL fingerprint of the set (scene + locator names/times) for
  * change-detection only — it needn't match the bridge's canonical signature. */
@@ -94,11 +113,14 @@ async function tick() {
       fire('live.state', liveState(si));
       if (!si.is_playing) {
         lastT = -1; lastScene = -1; // stopped
-      } else if (si.back_to_arranger) {
-        // SESSION mode -> scene launches (via the playing row); locators suppressed.
-        // si.playing_scene needs the Remote Script's get_scene_info extension
-        // (loads on the next Ableton restart); until then scenes stay dormant here.
-        lastT = -1;
+      } else {
+        // The mode gate keys off playing_scene, NOT back_to_arranger: the orange
+        // "Back to Arrangement" flag stays lit after any session override — even
+        // while the Arrangement is what's audibly playing — so gating locators on
+        // it silently killed crossings mid-set. A playing session ROW is the
+        // reliable signal for both directions.
+        // (si.playing_scene needs the Remote Script's get_scene_info extension;
+        // until that loads — next Ableton restart — scenes stay dormant here.)
         const row = (typeof si.playing_scene === 'number') ? si.playing_scene : -1;
         if (row >= 0 && row !== lastScene) {
           lastScene = row;
@@ -106,23 +128,27 @@ async function tick() {
           fire('scene.launched', { index: row, name: name });
           console.log('[feeder] -> scene.launched', row, JSON.stringify(name));
         }
-      } else {
-        // ARRANGEMENT mode -> locator crossings; scene state reset.
-        lastScene = -1;
-        const t = si.current_song_time;
-        if (lastT < 0) {
-          lastT = t; // anchor
+        if (row < 0) lastScene = -1; // session row stopped -> rearm relaunch of the same scene
+        if (row >= 0) {
+          // SESSION owns the show -> locators suppressed; re-anchor on return.
+          lastT = -1;
         } else {
-          const d = t - lastT;
-          if (d > 0 && d <= SEEK_GUARD) {
-            for (const c of cues) {
-              if (c.time > lastT && c.time <= t) {
-                fire('locator.crossed', { index: c.index, name: c.name });
-                console.log('[feeder] -> locator.crossed', c.index, JSON.stringify(c.name), 'at t=' + t.toFixed(1));
+          // ARRANGEMENT (no session scene playing) -> locator crossings.
+          const t = si.current_song_time;
+          if (lastT < 0) {
+            lastT = t; // anchor
+          } else {
+            const d = t - lastT;
+            if (d > 0 && d <= SEEK_GUARD) {
+              for (const c of cues) {
+                if (c.time > lastT && c.time <= t) {
+                  fire('locator.crossed', { index: c.index, name: c.name });
+                  console.log('[feeder] -> locator.crossed', c.index, JSON.stringify(c.name), 'at t=' + t.toFixed(1));
+                }
               }
             }
+            lastT = t;
           }
-          lastT = t;
         }
       }
     }

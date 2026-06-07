@@ -18,8 +18,16 @@ it's offline the bridge/p5 fall back to manual control. It only ever emits a
 ```bash
 cd apps/ml-service
 python3 -m venv .venv && source .venv/bin/activate    # or: uv venv && source .venv/bin/activate
+
+# Install — pick per feature (pyproject.toml is the requirements source of truth):
+pip install -e '.[dev]' anthropic    # base + tests + Dream (prompt → Claude codegen)
+pip install -e '.[generate]'         # + Sync (audio → CLAP/librosa vibe; pulls torch, HEAVY)
+
+# Dream/Sync also need ANTHROPIC_API_KEY in the repo-root .env (see .env.example).
+
 export PYTHONPATH=src
 python -m lichtspiel_ml.app          # http://127.0.0.1:7892
+# (or from the repo root: pnpm dev:ml — expects the .venv above)
 
 # try it:
 curl localhost:7892/health
