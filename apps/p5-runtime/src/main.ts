@@ -33,6 +33,7 @@ import { createMonomeMapping } from './monomeMapping.js';
 import { DebugPanel } from './ui/debugPanel.js';
 import { MonomeTwin } from './ui/monomeTwin.js';
 import { GesturalPanel } from './ui/gesturalPanel.js';
+import { ModeBar, type UiMode } from './ui/modeBar.js';
 import { BridgeClient } from './transport/bridgeClient.js';
 import { randomizeParams, mutateParams } from './mutations/paramMutation.js';
 import { createVariantBrowser } from './mutations/variantBrowser.js';
@@ -261,9 +262,9 @@ let bridgeConnected = false; // drives bridge-vs-local for Refresh/Save/Load (Ph
 // The gestural panel (control map + variant readout, toggled with `h`) and the
 // variant browser (new / canonical / step through each template's structural
 // space, live). The browser is the single template-mount authority: it re-mounts
-// at the active variant + refreshes the panel.
-const panel = new GesturalPanel();
-const panelEl = document.querySelector('.gestural-panel') as HTMLElement | null;
+// at the active variant + refreshes the panel. The panel lives in the left rail
+// directly under the monome twin, collapsed by default (symbol-cued compact map).
+const panel = new GesturalPanel(document.getElementById('gestural-mount') ?? document.body);
 
 // Discover button (generative track) — one click asks the backend to synthesize a
 // fresh template from the current working track. See docs/generative-architecture.md.
@@ -358,11 +359,31 @@ const variants = createVariantBrowser({
   divergence: 0.6,
 });
 
-/** Reflect the current scene + its registry neighbour in the center NOW/NEXT strip. */
-function updateNowNext(template: VisualTemplate): void {
+/**
+ * Reflect the current scene in the center NOW/NEXT strip. `nextLabel` overrides
+ * the default registry-neighbour NEXT — Ableton-driven activations pass the
+ * *upcoming row's* resolution instead (fixed name, "🎲 random", or "— off"),
+ * so NEXT never claims a concrete template that a random pick won't honor.
+ */
+function updateNowNext(template: VisualTemplate, nextLabel?: string): void {
   nnNow.textContent = template.name;
-  const next = registry.neighbor(template.id, 1);
-  nnNext.textContent = next?.name ?? '—';
+  nnNext.textContent = nextLabel ?? registry.neighbor(template.id, 1)?.name ?? '—';
+}
+
+/** What the NEXT trigger (row index+1, same kind) would actually resolve to. */
+function upcomingLabel(evt: AbletonEvent): string {
+  const rows = evt.kind === 'scene' ? abletonMap?.session.scenes : abletonMap?.arrangement.locators;
+  const next = rows?.find((r) => r.index === evt.index + 1);
+  if (next) {
+    if (!next.enabled) return '— off';
+    if (next.templateMode === 'fixed' && next.templateId)
+      return registry.get(next.templateId)?.name ?? '🎲 random';
+    return '🎲 random';
+  }
+  // No row: the Phase-5a fallback — random mode rolls dice; mapped mode is the
+  // deterministic index-based pick.
+  if (retrievalMode === 'random') return '🎲 random';
+  return registry.at((((evt.index + 1) % registry.size) + registry.size) % registry.size)?.name ?? '—';
 }
 
 /** Switch scenes. Manual selects always win; bridge/retrieval selects respect lock. */
@@ -441,6 +462,33 @@ mappingPanel.setSource(eventSource);
 mappingPanel.setFallback(retrievalMode);
 mappingPanel.setLock(locked);
 
+// ── PLAN / PERFORM / ARRANGE modes ───────────────────────────────────
+// Top-center mode bar; each mode = a use case with its own theme + layout.
+//   PLAN    (silver, the classic face) — composition: both rails open with full
+//           info, both mapping tables, gestural map expanded.
+//   PERFORM (black) — Session playing: scenes table only; the left rail
+//           auto-collapses when scenes start launching so the canvas opens up
+//           (the right rail can still be closed by hand for full-screen).
+//   ARRANGE (walnut brown) — Arrangement prep: locators table only.
+const modeBar = new ModeBar(centerEl, (m) => setMode(m));
+function setMode(m: UiMode): void {
+  document.body.classList.remove('theme-plan', 'theme-perform', 'theme-arrange');
+  document.body.classList.add(`theme-${m}`);
+  modeBar.setActive(m);
+  mappingPanel.setView(m === 'plan' ? 'both' : m === 'perform' ? 'session' : 'arrangement');
+  if (m === 'plan') {
+    // Plan = everything on the table: both rails + the full gestural map.
+    setLeftCollapsed(false);
+    setRightCollapsed(false);
+    panel.setExpanded(true);
+  } else if (m === 'perform') {
+    // Perform = open the canvas up ONCE on entry; if the performer re-opens
+    // the rail afterwards it stays open (scene launches never re-collapse it).
+    setLeftCollapsed(true);
+  }
+  console.info(`[lichtspiel] mode → ${m}`);
+}
+
 // ── Bus wiring ───────────────────────────────────────────────────────
 bus.on('scene.select', ({ sceneId }) => {
   const t = registry.get(sceneId);
@@ -486,7 +534,7 @@ function respond(evt: AbletonEvent): void {
   // Parent template → child variant: canonical (signature) or a fresh random one.
   if (d.variantMode === 'canonical') variants.canonical(d.template);
   else variants.newVariant(d.template);
-  updateNowNext(d.template);
+  updateNowNext(d.template, upcomingLabel(evt));
   debug.setAbletonEvent(evt, d.template.name);
   mappingPanel.markTriggered(evt, d.template.name);
   bridge.send(
@@ -667,9 +715,8 @@ installKeyboard({
   },
   toggleDebug: () => debug.toggle(),
   toggleEmulator: () => twin.toggle(),
-  // The twin now lives permanently in the left rail; `h` reveals the floating
-  // gestural control-map overlay (off by default in the dashboard).
-  toggleGestural: () => panelEl?.classList.toggle('shown'),
+  // `h` expands/collapses the gestural control map under the twin in the left rail.
+  toggleGestural: () => panel.toggle(),
   toggleAbletonPanel: () => mappingPanel.toggle(),
   cycleRetrievalMode: () => {
     retrievalMode = retrievalMode === 'mapped' ? 'random' : 'mapped';
@@ -712,6 +759,7 @@ bridge.connect();
 twin.toggle();
 mappingPanel.toggle();
 debug.toggle();
+setMode('plan'); // boot in PLAN (silver) — everything open for composition
 
 // Browser-only dashboard parity: with no real hardware, simulate a Grid 64 + Arc 4
 // so the Gestures rail shows the grid + encoders (real device.attached overrides

@@ -42,12 +42,18 @@ export interface AbletonMappingPanelOptions {
 
 type RowKind = 'scene' | 'locator';
 
+/** Which mapping tables are visible — PLAN shows both, PERFORM the Session
+ *  scenes (where live performance happens), ARRANGE the Arrangement locators. */
+export type MappingView = 'both' | 'session' | 'arrangement';
+
 export class AbletonMappingPanel {
   private readonly root: HTMLElement;
   private readonly metaEl: HTMLElement;
   private readonly loadSel: HTMLSelectElement;
   private readonly locBody: HTMLElement;
   private readonly sceneBody: HTMLElement;
+  private readonly locSection: HTMLElement[];
+  private readonly sceneSection: HTMLElement[];
   private collapsed = true;
   private mapping: AbletonMapping | null = null;
   private source: EventSource = 'live';
@@ -135,11 +141,13 @@ export class AbletonMappingPanel {
     locLabel.textContent = 'Arrangement locators';
     const loc = this.makeTable('time');
     this.locBody = loc.tbody;
+    this.locSection = [locLabel, loc.table];
 
     const sceneLabel = el('div', 'ap-section-label');
     sceneLabel.textContent = 'Session scenes';
     const scene = this.makeTable('idx');
     this.sceneBody = scene.tbody;
+    this.sceneSection = [sceneLabel, scene.table];
 
     body.append(controls, locLabel, loc.table, sceneLabel, scene.table);
     this.root.append(header, this.metaEl, body);
@@ -151,6 +159,12 @@ export class AbletonMappingPanel {
     this.collapsed = !this.collapsed;
     this.root.classList.toggle('collapsed', this.collapsed);
     if (!this.collapsed) this.opts.onListRequest();
+  }
+
+  /** Show both tables (plan), Session scenes only (perform), or locators only (arrange). */
+  setView(view: MappingView): void {
+    for (const n of this.locSection) n.classList.toggle('hidden', view === 'session');
+    for (const n of this.sceneSection) n.classList.toggle('hidden', view === 'arrangement');
   }
 
   setMapping(m: AbletonMapping | null): void {
@@ -286,7 +300,9 @@ export class AbletonMappingPanel {
   private makeTable(idxLabel: string): { table: HTMLElement; tbody: HTMLElement } {
     const table = el('table', 'ap-table');
     const thead = document.createElement('thead');
-    thead.innerHTML = `<tr><th></th><th>name</th><th>${idxLabel}</th><th>template</th><th>variant</th><th></th><th>last</th></tr>`;
+    // No "last" column — the last-triggered label collapses under the ▶ icon
+    // of the active row (so it can't clip on the panel edge or eat width).
+    thead.innerHTML = `<tr><th></th><th>name</th><th>${idxLabel}</th><th>template</th><th>variant</th><th></th></tr>`;
     const tbody = document.createElement('tbody');
     table.append(thead, tbody);
     return { table, tbody };
@@ -305,7 +321,7 @@ export class AbletonMappingPanel {
     if (rows.length === 0) {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 7;
+      td.colSpan = 6;
       td.className = 'ap-empty';
       td.textContent = `— no ${kind === 'locator' ? 'locators' : 'scenes'} — press Refresh`;
       tr.appendChild(td);
@@ -342,17 +358,19 @@ export class AbletonMappingPanel {
       const varCell = document.createElement('td');
       varCell.appendChild(this.variantSelect(row));
 
+      // ▶ preview with the last-triggered label stacked UNDER it — hidden until
+      // this row is the active (last-fired) one, so it costs no width and the
+      // text wraps inside the cell instead of clipping at the panel edge.
       const prevCell = document.createElement('td');
+      prevCell.className = 'ap-prevcell';
       const prev = button('▶', () => this.opts.onPreview({ kind, index: row.index, name: row.name }));
       prev.classList.add('ap-prev');
-      prevCell.appendChild(prev);
+      const lastEl = el('div', 'ap-lastline');
+      prevCell.append(prev, lastEl);
 
-      const lastCell = document.createElement('td');
-      lastCell.className = 'ap-last';
-
-      tr.append(enCell, nameCell, idxCell, tplCell, varCell, prevCell, lastCell);
+      tr.append(enCell, nameCell, idxCell, tplCell, varCell, prevCell);
       tbody.appendChild(tr);
-      this.rowEls.set(row, { tr, last: lastCell });
+      this.rowEls.set(row, { tr, last: lastEl });
     }
   }
 

@@ -28,6 +28,64 @@
     rgba(232, 233, 234, 0.5) 100%
   );
   --frost: blur(16px) saturate(0.8);
+  --input-bg: rgba(250, 246, 237, 0.75);
+}
+
+/* ── Mode themes (PLAN / PERFORM / ARRANGE) ───────────────────────────
+   The :root values above ARE the PLAN (silver) theme — composition.
+   PERFORM = black chassis (stage-dark, live Session playing).
+   ARRANGE = walnut brown (warm wood-panel, Arrangement prep).
+   Variables are re-declared on <body> so every var() consumer (rails, HUD,
+   panels, buttons) re-skins at once when main.ts swaps the body class. */
+body.theme-perform {
+  color-scheme: dark;
+  --bg: #0d0e10;
+  --rail-bg: #16171a;
+  --line: rgba(225, 228, 232, 0.14);
+  --line-strong: rgba(225, 228, 232, 0.28);
+  --accent: #c9ccd0;
+  --text: #e8eaec;
+  --muted: #9aa0a6;
+  --dim: #62666b;
+  --live: #d3d6d9;
+  --wood: #3a3d40;
+  --on-accent: #101113;
+  --metal: linear-gradient(180deg, #3a3d41 0%, #232629 46%, #17191b 54%, #2c2f33 100%);
+  --metal-active: linear-gradient(180deg, #6a6f75 0%, #4a4f55 48%, #34383d 56%, #565b61 100%);
+  --metal-edge: #3c4044;
+  --panel: rgba(20, 21, 23, 0.86);
+  --panel-metal: linear-gradient(
+    135deg,
+    rgba(30, 31, 34, 0.6) 0%,
+    rgba(16, 17, 18, 0.5) 50%,
+    rgba(27, 28, 31, 0.6) 100%
+  );
+  --input-bg: rgba(34, 36, 39, 0.85);
+}
+body.theme-arrange {
+  color-scheme: dark;
+  --bg: #43301f;
+  --rail-bg: #382716;
+  --line: rgba(240, 228, 214, 0.16);
+  --line-strong: rgba(240, 228, 214, 0.32);
+  --accent: #e0c9a6;
+  --text: #f0e6d8;
+  --muted: #c4ad92;
+  --dim: #8d7a66;
+  --live: #e8d5b5;
+  --wood: #2c1f12;
+  --on-accent: #2a1d12;
+  --metal: linear-gradient(180deg, #7a5c41 0%, #5f4530 46%, #4c3624 54%, #6b4f38 100%);
+  --metal-active: linear-gradient(180deg, #a8835c 0%, #84653f 48%, #6b4f2c 56%, #937048 100%);
+  --metal-edge: #33271a;
+  --panel: rgba(62, 44, 31, 0.86);
+  --panel-metal: linear-gradient(
+    135deg,
+    rgba(86, 62, 43, 0.55) 0%,
+    rgba(58, 41, 28, 0.45) 50%,
+    rgba(80, 58, 40, 0.55) 100%
+  );
+  --input-bg: rgba(74, 54, 36, 0.85);
 }
 
 * {
@@ -41,6 +99,17 @@ body {
   height: 100%;
   background: var(--bg);
   overflow: hidden;
+}
+/* Ease the chassis between mode themes (silver ⇄ black ⇄ walnut). */
+body,
+.app-shell,
+.rail,
+.hud,
+.now-next {
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease;
 }
 
 /* ── Three-column dashboard shell ─────────────────────────────────── */
@@ -183,6 +252,70 @@ body {
 }
 #stage canvas {
   display: block;
+}
+
+/* ── Mode bar (PLAN / PERFORM / ARRANGE) — top center ─────────────────
+   Every chip keeps its mode's identity color at all times; the inactive ones
+   are transparent/faded so the active mode is unmistakable at a glance.
+   NOTE: positioned top:12px center — overlaps the ai-commit .now-next (top:0,
+   autohide). Reconcile placement after checking (see notes). */
+.mode-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 7;
+  transition: top 0.22s ease; /* matches the ribbon's slide timing */
+}
+/* When the autohide NOW/NEXT ribbon is pulled down (hover), drop the mode bar
+   below it so the two don't overlap. Siblings: mode-bar mounts after #now-next. */
+.now-next:hover ~ .mode-bar {
+  top: 54px;
+}
+.mode-btn {
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 5px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0.32;
+  transition:
+    opacity 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+.mode-btn:hover {
+  opacity: 0.65;
+}
+.mode-btn.active {
+  opacity: 1;
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+/* PLAN — silver/white (the classic receiver face): composition. */
+.mode-btn.mode-plan {
+  background: linear-gradient(180deg, #f5f6f7 0%, #d3d6d9 50%, #c2c6c9 100%);
+  color: #26282b;
+  border: 1px solid #9b9fa3;
+}
+/* PERFORM — black (stage dark): live Session playing. */
+.mode-btn.mode-perform {
+  background: linear-gradient(180deg, #2e3134 0%, #141517 50%, #0a0b0c 100%);
+  color: #e8eaec;
+  border: 1px solid #000;
+}
+/* ARRANGE — walnut brown (wood panel): Arrangement prep. */
+.mode-btn.mode-arrange {
+  background: linear-gradient(180deg, #8a6a4b 0%, #5f4530 50%, #4a3422 100%);
+  color: #f0e6d8;
+  border: 1px solid #33271a;
 }
 
 /* Autohiding top bar: rests off the top edge with the handle peeking, slides
