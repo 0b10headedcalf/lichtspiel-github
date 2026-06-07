@@ -12,6 +12,9 @@
  *   strobe     → channel-offset glitch bursts
  *   symmetry   → coherent vs chaotic rotation gradient
  *   palette/contrast/lineWeight → stroke color + weight
+ *
+ * Audio (ctx.getAudio): level → drift speed, beat → extra glitch slices, flux →
+ * slice displacement — a no-op when silent.
  */
 
 import type { VisualTemplate } from '../visualTemplate.js';
@@ -51,7 +54,8 @@ export const parquetGlitch: VisualTemplate = {
         cur = params;
       },
       draw({ p, width, height, dt }) {
-        t += dt * (0.15 + cur.motion * 1.4);
+        const au = ctx.getAudio();
+        t += dt * (0.15 + cur.motion * 1.4 + au.level * 0.8);
 
         p.noStroke();
         p.fill(0, 0, 6, 55 + (1 - cur.feedback) * 45);
@@ -91,12 +95,12 @@ export const parquetGlitch: VisualTemplate = {
         }
 
         // horizontal glitch slices
-        const slices = Math.round(cur.turbulence * 14);
+        const slices = Math.round(cur.turbulence * 14 + au.beat * 10);
         for (let s = 0; s < slices; s++) {
           if (rng.random() > 0.5) continue;
           const sy = rng.int(height);
           const sh = 2 + rng.int(Math.max(3, Math.round(height * 0.06)));
-          const dx = (rng.random() * 2 - 1) * width * 0.08 * (0.4 + cur.turbulence);
+          const dx = (rng.random() * 2 - 1) * width * 0.08 * (0.4 + cur.turbulence + au.flux * 0.5);
           const region = p.get(0, sy, width, sh);
           p.image(region, dx, sy);
         }

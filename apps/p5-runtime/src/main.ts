@@ -18,6 +18,7 @@ import {
   ADE_SLEUTH_SNAPSHOT,
   ARC_4,
   GRID_64,
+  SILENT_FEATURES,
   clamp01,
   describeSetup,
   signatureOf,
@@ -47,6 +48,10 @@ import { TakeoverClock } from './live/takeoverClock.js';
 import { AbletonMappingPanel } from './ui/abletonMappingPanel.js';
 import { createRng, randomSeed } from './seededRng.js';
 import type { VisualTemplate } from './visualTemplate.js';
+import { AudioEngine } from './audio/audioEngine.js';
+import { DistortionLayer } from './audio/distortionLayer.js';
+import { mapFeaturesToUniforms, type DistortionStyle } from './audio/audioMapping.js';
+import { AudioPanel } from './ui/audioPanel.js';
 
 // ── DOM handles ──────────────────────────────────────────────────────
 const stage = document.getElementById('stage') as HTMLElement;
@@ -517,6 +522,93 @@ devices.onChange((active, src) => {
   console.info(`[lichtspiel] monome (${src}) → ${describeSetup(active)}`);
 });
 
+// ── Audio-reactive distortion (a different axis from the monome) ──────
+// The monome writes the VisualParamVector — the scene's CONTENT. Audio instead
+// drives a WebGL post-process that warps the rendered PIXELS (bulge · wave-warp ·
+// ripple · chromatic split · datamosh glitch · feedback echo · kaleido · VHS),
+// layered over EVERY template and bypassed cleanly when off. Enable + tune from
+// the audio panel (`f`); toggle the overlay with `x`. Browser-only: it taps a mic
+// / line-in / loopback (e.g. BlackHole carrying Ableton's master) via Web Audio.
+//
+// Audio ALSO rides the app bus as `audio.features`, so individual templates can
+// additionally react (e.g. beat-synced density) on top of the distortion — a
+// second, opt-in axis. The host forwards the latest features to the active sketch
+// (MountContext.getAudio); the Scene toggle (`b`) gates it.
+const distortion = new DistortionLayer(centerEl, () => stage.querySelector('canvas'));
+const audio = new AudioEngine();
+let audioAmount = 0.7;
+let audioStyle: DistortionStyle = 'liquid';
+let sceneReact = true; // feed audio features to templates (beat-synced reactivity)
+let meterTick = 0;
+const kHz = (): string => `${(audio.sampleRate() / 1000).toFixed(1)} kHz`;
+
+// Publish-on-the-bus → host: the active sketch pulls these via MountContext.getAudio.
+bus.on('audio.features', (f) => host.setAudioFeatures(f));
+
+const audioPanel = new AudioPanel(document.body, {
+  onEnable: () => {
+    void (async () => {
+      try {
+        await audio.start(audioPanel.selectedDeviceId() || undefined);
+        audioPanel.setRunning(true, kHz());
+        audioPanel.setDevices(await audio.listInputs(), audio.currentDeviceId());
+        distortion.setEnabled(true); // show the effect immediately on enable
+        audioPanel.setDistort(distortion.isEnabled());
+      } catch (err) {
+        audioPanel.setRunning(false);
+        audioPanel.setStatus(err instanceof Error ? err.message : 'audio error');
+        console.warn('[lichtspiel] audio start failed', err);
+      }
+    })();
+  },
+  onDisable: () => {
+    audio.stop();
+    audioPanel.setRunning(false, 'stopped');
+    bus.emit('audio.features', SILENT_FEATURES); // let reactive templates relax
+  },
+  onDeviceChange: (id) => {
+    if (!audio.isRunning()) return;
+    void audio
+      .start(id)
+      .then(() => audioPanel.setRunning(true, kHz()))
+      .catch((err) => audioPanel.setStatus(err instanceof Error ? err.message : 'audio error'));
+  },
+  onSensitivity: (v) => audio.setSensitivity(v),
+  onAmount: (v) => {
+    audioAmount = v;
+  },
+  onStyle: (s) => {
+    audioStyle = s;
+  },
+  onDistortToggle: (on) => {
+    distortion.setEnabled(on);
+    audioPanel.setDistort(distortion.isEnabled());
+  },
+  onSceneReactToggle: (on) => {
+    sceneReact = on;
+    if (!on) bus.emit('audio.features', SILENT_FEATURES); // stop driving templates
+  },
+});
+audioPanel.setStyle(audioStyle);
+audioPanel.setAmount(audioAmount);
+audioPanel.setSceneReact(sceneReact);
+
+// One always-on tick: sample audio (when running) + drive the overlay. Cheap,
+// self-perpetuating, and near-free when both audio and distortion are idle.
+function audioFrame(): void {
+  const running = audio.isRunning();
+  const features = running ? audio.sample() : SILENT_FEATURES;
+  if (running && (meterTick++ & 1) === 0) audioPanel.setFeatures(features);
+  // Publish on the app bus so audio-reactive templates can respond (a different
+  // axis from the monome, additive to the distortion). Gated by the Scene toggle.
+  if (running && sceneReact) bus.emit('audio.features', features);
+  if (distortion.isEnabled()) {
+    distortion.render(mapFeaturesToUniforms(features, audioAmount, audioStyle));
+  }
+  requestAnimationFrame(audioFrame);
+}
+requestAnimationFrame(audioFrame);
+
 // ── Keyboard handlers ────────────────────────────────────────────────
 function adjustKey(key: NumericParamKey, delta: number): void {
   const cur = host.targetParams();
@@ -583,6 +675,16 @@ installKeyboard({
   // gestural control-map overlay (off by default in the dashboard).
   toggleGestural: () => panelEl?.classList.toggle('shown'),
   toggleAbletonPanel: () => mappingPanel.toggle(),
+  toggleAudioPanel: () => audioPanel.toggle(),
+  toggleDistortion: () => {
+    distortion.setEnabled(!distortion.isEnabled());
+    audioPanel.setDistort(distortion.isEnabled());
+  },
+  toggleSceneReact: () => {
+    sceneReact = !sceneReact;
+    audioPanel.setSceneReact(sceneReact);
+    if (!sceneReact) bus.emit('audio.features', SILENT_FEATURES);
+  },
   cycleRetrievalMode: () => {
     retrievalMode = retrievalMode === 'mapped' ? 'random' : 'mapped';
     debug.setRetrievalMode(retrievalMode);
@@ -636,6 +738,6 @@ const first = registry.at(0);
 if (first) selectScene(first, true); // mount via the browser so the panel initializes
 console.info(
   `[lichtspiel] p5 runtime up — ${registry.size} templates. ` +
-    `Press 'd' HUD · 'g' twin · 'h' gestures · 'a' Ableton mapping · 'v/c/,/.' variants. ` +
+    `Press 'd' HUD · 'g' twin · 'h' gestures · 'a' Ableton mapping · 'f' audio · 'v/c/,/.' variants. ` +
     `Bridge: ${wsUrl} (optional).`,
 );

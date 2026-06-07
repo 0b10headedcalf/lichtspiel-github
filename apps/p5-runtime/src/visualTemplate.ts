@@ -12,6 +12,7 @@ import type p5 from 'p5';
 import type {
   ArcDeltaEvent,
   ArcKeyEvent,
+  AudioFeatures,
   GesturalEntry,
   GridKeyEvent,
   LedFrame,
@@ -56,6 +57,13 @@ export interface MountContext {
   setup: MonomeSetup;
   /** Host actions a sketch may invoke from hardware (scene/variant control). */
   controls: HostControls;
+  /**
+   * Read the latest audio-analysis vector (SILENT_FEATURES when no audio is
+   * running, or when scene-reactivity is off). A template can pull this in
+   * update()/draw() to react to sound on top of its params — a different axis
+   * from the monome, and additive to the global distortion post-FX.
+   */
+  getAudio: () => AudioFeatures;
 }
 
 /** Context handed to draw() each frame (for convenience helpers). */

@@ -11,6 +11,9 @@
  *   symmetry             → radial regularity vs wobble
  *   rotationZ            → slow tunnel roll
  *   palette/contrast     → hue + tonal spread
+ *
+ * Audio (ctx.getAudio): level → scroll speed, beat → ring count, bass →
+ * topographic displacement, treble → stroke weight — a no-op when silent.
  */
 
 import type { VisualTemplate } from '../visualTemplate.js';
@@ -50,7 +53,8 @@ export const topographicTunnel: VisualTemplate = {
         cur = params;
       },
       draw({ p, width, height, dt }) {
-        const speed = 0.06 + cur.motion * 0.9 + cur.cameraDepth * 0.4;
+        const au = ctx.getAudio();
+        const speed = 0.06 + cur.motion * 0.9 + cur.cameraDepth * 0.4 + au.level * 0.7;
         scroll += dt * speed;
         roll += dt * (cur.rotationZ - 0.5) * 1.6;
 
@@ -62,15 +66,15 @@ export const topographicTunnel: VisualTemplate = {
         const cx = width / 2;
         const cy = height / 2;
         const maxR = Math.hypot(width, height) * 0.62;
-        const rings = Math.round(14 + cur.density * 22);
+        const rings = Math.round(14 + cur.density * 22 + au.beat * 8);
         const verts = Math.round(24 + cur.density * 64);
-        const wobble = cur.turbulence * (1 - cur.symmetry * 0.7);
+        const wobble = cur.turbulence * (1 - cur.symmetry * 0.7) + au.bass * 0.4;
         const t = scroll;
 
         p.push();
         p.translate(cx, cy);
         p.rotate(roll);
-        p.strokeWeight(0.6 + cur.lineWeight * 4);
+        p.strokeWeight(0.6 + cur.lineWeight * 4 + au.treble * 1.5);
         p.noFill(); // critical: rings are stroked outlines, never filled
 
         for (let i = 0; i < rings; i++) {

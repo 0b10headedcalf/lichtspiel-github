@@ -26,6 +26,12 @@ export interface KeyboardHandlers {
   toggleGestural(): void;
   /** Toggle the Ableton scene/locator → animation mapping panel. */
   toggleAbletonPanel(): void;
+  /** Toggle the audio-reactive distortion control panel. */
+  toggleAudioPanel(): void;
+  /** Toggle the audio distortion overlay on/off (independent of the panel). */
+  toggleDistortion(): void;
+  /** Toggle audio→scene reactivity (feed audio features to templates). */
+  toggleSceneReact(): void;
   /** Cycle the Ableton retrieval mode: mapped ⇄ random. */
   cycleRetrievalMode(): void;
   /** Cycle the event source: live (real OSC) ⇄ simulated (UI-fired). */
@@ -113,6 +119,15 @@ export function installKeyboard(h: KeyboardHandlers): () => void {
       case 'KeyA':
         h.toggleAbletonPanel();
         break;
+      case 'KeyF':
+        h.toggleAudioPanel();
+        break;
+      case 'KeyX':
+        h.toggleDistortion();
+        break;
+      case 'KeyB':
+        h.toggleSceneReact();
+        break;
       case 'KeyN':
         h.next();
         break;
@@ -154,5 +169,6 @@ export const KEYBOARD_HELP = [
   'space lock · r randomize · s surprise',
   'v new variant · c canonical · , . step variant',
   'd debug · g monome twin · h gestures · a mapping',
+  'f audio panel · x distortion · b scene react',
   'm retrieval mode · e event source · k/l sim scene/locator',
 ].join('\n');

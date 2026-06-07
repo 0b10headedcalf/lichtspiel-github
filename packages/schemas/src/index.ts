@@ -7,6 +7,7 @@
  */
 
 export * from './visualParams.js';
+export * from './audioFeatures.js';
 export * from './liveSession.js';
 export * from './monome.js';
 export * from './monomeProfiles.js';

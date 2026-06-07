@@ -23,6 +23,9 @@
  * The host integrates the physics via `arc.tick(dt*1000)` each frame; the sketch
  * never damps itself. Visual values fold gently with the live VisualParamVector
  * axes. WEBGL, seeded entirely via ctx.rng.
+ *
+ * Audio (ctx.getAudio): beat → cube face brightness, bass → cube zoom pulse —
+ * additive to the velocity-physics control, a no-op when silent.
  */
 
 import { type VisualParamVector, clamp01, lerp } from '@lichtspiel/schemas';
@@ -555,9 +558,10 @@ export const itoBox: VisualTemplate = {
         p.directionalLight(180, 180, 180, -0.3, 0.35, -1.0);
 
         // Central roulette cube.
-        const contrast = 0.75 + cur.contrast * 0.5; // live contrast rides face brightness
+        const au = ctx.getAudio();
+        const contrast = 0.75 + cur.contrast * 0.5 + au.beat * 0.5; // + beat brightness
         p.push();
-        p.scale(zoom);
+        p.scale(zoom * (1 + au.bass * 0.12)); // bass zoom pulse
         p.rotateX(-Math.PI * 0.12);
         p.rotateY(yaw);
         p.rotateX(pitch);

@@ -2,6 +2,10 @@
  * minimalPulse — new, simple, low-CPU fallback scene. Concentric rings
  * breathing from the center. Reliable for demos when everything else is
  * uncertain. No external lineage; this is the safe default scene.
+ *
+ * Also a reference for audio-reactive templates: it pulls `ctx.getAudio()` to
+ * add beat-synced ring density + a bass radius swell on top of its params — a
+ * no-op when no audio runs (SILENT_FEATURES → every added term is 0).
  */
 
 import type { VisualTemplate } from '../visualTemplate.js';
@@ -30,7 +34,8 @@ export const minimalPulse: VisualTemplate = {
         cur = params;
       },
       draw({ p, width, height, dt }) {
-        phase += dt * (0.2 + cur.motion * 2.2);
+        const au = ctx.getAudio();
+        phase += dt * (0.2 + cur.motion * 2.2 + au.level * 1.6);
 
         // feedback → trailing; otherwise clean wipe
         const fade = 12 + (1 - cur.feedback) * 88;
@@ -41,14 +46,16 @@ export const minimalPulse: VisualTemplate = {
         const cx = width / 2;
         const cy = height / 2;
         const maxR = Math.hypot(width, height) / 2;
-        const rings = Math.round(3 + cur.density * 13);
-        p.strokeWeight(0.5 + cur.lineWeight * 6);
+        // density reacts to onsets: rings bloom on the beat (SILENT → unchanged).
+        const rings = Math.round(3 + cur.density * 13 + au.beat * 6);
+        const bassSwell = 1 + au.bass * 0.22; // low-end widens the ring radii
+        p.strokeWeight(0.5 + cur.lineWeight * 6 + au.level * 3);
         p.noFill();
 
         for (let i = 0; i < rings; i++) {
           const f = i / rings;
           const pulse = 0.5 + 0.5 * Math.sin(phase - f * 6.28 * (0.5 + cur.symmetry));
-          const r = maxR * (0.06 + f * 0.95) * (0.85 + 0.15 * pulse);
+          const r = maxR * (0.06 + f * 0.95) * (0.85 + 0.15 * pulse) * bassSwell;
           const c = paletteColor(p, cur.palette, f, cur.contrast, 35 + pulse * 65);
           p.stroke(c);
           p.circle(cx, cy, r * 2);

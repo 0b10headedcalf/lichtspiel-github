@@ -13,6 +13,9 @@
  * reshapes 8×16 → 8×8 across a hot-swap; the arc → `arcMacros` (resting/active
  * alpha, bg brightness, connection opacity; press randomises colours / toggles
  * the border). WEBGL.
+ *
+ * Audio (ctx.getAudio): beat → connection firing, bass → field "breathing"
+ * (scale pulse) — additive to the monome control, a no-op when silent.
  */
 
 import { type VisualParamVector, clamp01, lerp } from '@lichtspiel/schemas';
@@ -232,6 +235,7 @@ export const patternGridWorld: VisualTemplate = {
       draw({ p, width, height, dt }): void {
         elapsed += dt;
         paint.tick(dt * 1000);
+        const au = ctx.getAudio();
 
         const av = arc.values();
         const restA = Math.floor(lerp(20, 200, av.restAlpha ?? 0.5));
@@ -255,7 +259,7 @@ export const patternGridWorld: VisualTemplate = {
         const gw = cols * (CUBE + GAP);
         const gh = rows * (CUBE + GAP);
         const gd = depth * (CUBE + GAP);
-        const scale = Math.min(width, height) / (Math.max(gw, gh, gd) * 1.7);
+        const scale = (Math.min(width, height) / (Math.max(gw, gh, gd) * 1.7)) * (1 + au.bass * 0.15);
 
         p.push();
         p.scale(scale);
@@ -310,7 +314,7 @@ export const patternGridWorld: VisualTemplate = {
         // connection lines — sample pairs (page-3 'connDensity' scales the spawn rate),
         // fade over the page-4 'life' time.
         for (let s = 0; s < connRate.samples; s++) {
-          if (ctx.rng.random() < connRate.prob * (0.4 + cur.density) * connDensityMul) {
+          if (ctx.rng.random() < connRate.prob * (0.4 + cur.density + au.beat) * connDensityMul) {
             connections.push({ a: pickNeuron(cols, rows), b: pickNeuron(cols, rows), born: elapsed });
           }
         }

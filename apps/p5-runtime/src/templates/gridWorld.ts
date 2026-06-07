@@ -11,6 +11,9 @@
  *   turbulence → noise jitter of cell positions
  *   cameraDepth→ cell size
  *   palette    → hue by activation; lineWeight → connection thickness
+ *
+ * Audio (via ctx.getAudio): beats lower the activation threshold (more lit
+ * connections), bass swells the nodes, treble adds jitter — a no-op when silent.
  */
 
 import type { VisualTemplate } from '../visualTemplate.js';
@@ -49,7 +52,8 @@ export const gridWorld: VisualTemplate = {
         cur = params;
       },
       draw({ p, width, height, dt }) {
-        t += dt * (0.2 + cur.motion * 2.0);
+        const au = ctx.getAudio();
+        t += dt * (0.2 + cur.motion * 2.0 + au.level * 1.4);
 
         p.noStroke();
         p.fill(0, 0, 7, 40 + (1 - cur.feedback) * 55);
@@ -60,8 +64,11 @@ export const gridWorld: VisualTemplate = {
         const cw = width / cols;
         const ch = height / rows;
         const cell = Math.min(cw, ch);
-        const jitter = cur.turbulence * cell * 0.45;
-        const dotMax = cell * (0.18 + cur.cameraDepth * 0.5);
+        // audio adds treble shimmer to the jitter, bass swell to the nodes, and
+        // lowers the activation threshold on beats (SILENT → unchanged).
+        const jitter = cur.turbulence * cell * 0.45 + au.treble * cell * 0.3;
+        const dotMax = cell * (0.18 + cur.cameraDepth * 0.5) * (1 + au.bass * 0.4);
+        const thresh = 0.45 - au.beat * 0.18;
 
         // activation field — optionally mirrored for symmetry
         const act = (i: number, j: number): number => {
@@ -81,15 +88,15 @@ export const gridWorld: VisualTemplate = {
         for (let i = 0; i < cols; i++) {
           for (let j = 0; j < rows; j++) {
             const a = act(i, j);
-            if (a < 0.45) continue;
+            if (a < thresh) continue;
             const x = px(i) + off(i, j);
             const y = py(j) + off(j, i);
-            if (i + 1 < cols && act(i + 1, j) > 0.45) {
+            if (i + 1 < cols && act(i + 1, j) > thresh) {
               const c = paletteColor(p, cur.palette, a, cur.contrast, 30 + a * 50);
               p.stroke(c);
               p.line(x, y, px(i + 1) + off(i + 1, j), y);
             }
-            if (j + 1 < rows && act(i, j + 1) > 0.45) {
+            if (j + 1 < rows && act(i, j + 1) > thresh) {
               const c = paletteColor(p, cur.palette, a, cur.contrast, 30 + a * 50);
               p.stroke(c);
               p.line(x, y, x, py(j + 1) + off(i, j + 1));

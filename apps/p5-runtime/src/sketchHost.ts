@@ -9,6 +9,7 @@ import p5 from 'p5';
 import {
   type ArcDeltaEvent,
   type ArcKeyEvent,
+  type AudioFeatures,
   type GesturalControlMap,
   type GridKeyEvent,
   type LedFrame,
@@ -16,6 +17,7 @@ import {
   type MonomeSetup,
   type VisualParamVector,
   DEFAULT_PARAMS as DEFAULTS,
+  SILENT_FEATURES,
   createLedFrame,
   describeSetup,
   lerpParams,
@@ -81,6 +83,7 @@ export class SketchHost {
   private target: VisualParamVector;
   private smoothed: VisualParamVector;
   private live: LiveSessionState | null = null;
+  private audio: AudioFeatures = SILENT_FEATURES;
 
   private lastTimeMs = 0;
   private frame = 0;
@@ -201,6 +204,7 @@ export class SketchHost {
       ledOut: this.ledOut,
       setup: this.setup,
       controls: this.controls,
+      getAudio: () => this.audio,
     };
 
     // Pick an alternative implementation if requested, else the canonical one.
@@ -269,6 +273,12 @@ export class SketchHost {
 
   setLive(state: LiveSessionState | null): void {
     this.live = state;
+  }
+
+  /** Latest audio features the active sketch can pull via MountContext.getAudio.
+   *  Fed from the app bus' `audio.features` event (see main.ts). */
+  setAudioFeatures(features: AudioFeatures): void {
+    this.audio = features;
   }
 
   dispatchGridKey(e: GridKeyEvent): void {

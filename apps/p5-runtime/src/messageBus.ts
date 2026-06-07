@@ -8,6 +8,7 @@ import type {
   AbletonSnapshot,
   ArcDeltaEvent,
   ArcKeyEvent,
+  AudioFeatures,
   DeviceAttached,
   DeviceDetached,
   GridKeyEvent,
@@ -27,6 +28,10 @@ export interface AppEvents {
   'params.patch': Partial<VisualParamVector>;
   /** New Live session state arrived. */
   'live.state': LiveSessionState;
+  /** Latest audio-analysis vector from the audio engine (Web Audio → features).
+   *  Published per frame while audio is running + scene-reactivity is on; one
+   *  SILENT_FEATURES frame is emitted when it stops so consumers relax. */
+  'audio.features': AudioFeatures;
   /** An Ableton Session scene was launched (Phase 5a auto-retrieval trigger). */
   'scene.launched': SceneLaunchedPayload;
   /** The Arrangement playhead crossed a locator/cue point (Phase 5a trigger). */

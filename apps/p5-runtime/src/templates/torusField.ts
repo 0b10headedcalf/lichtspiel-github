@@ -11,6 +11,9 @@
  *   cameraDepth   → camera distance
  *   turbulence    → per-object scale wobble
  *   palette/contrast/lineWeight → wireframe hue + weight
+ *
+ * Audio (ctx.getAudio): level → spin, beat → orbiter count, bass → wobble,
+ * treble → stroke weight — a no-op when silent.
  */
 
 import type p5 from 'p5';
@@ -56,7 +59,7 @@ export const torusField: VisualTemplate = {
     const rng = ctx.rng;
     const orbiters: Orbiter[] = [];
     const kinds: ShapeKind[] = ['torus', 'sphere', 'wavy'];
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 20; i++) {
       orbiters.push({
         angle: rng.range(Math.PI * 2),
         radius: rng.range(0.4, 1),
@@ -97,7 +100,8 @@ export const torusField: VisualTemplate = {
         cur = params;
       },
       draw({ p, dt }) {
-        const spin = 0.1 + cur.motion * 1.4;
+        const au = ctx.getAudio();
+        const spin = 0.1 + cur.motion * 1.4 + au.level * 1.2;
         rx += dt * (cur.rotationX - 0.5) * 2 * spin;
         ry += dt * (cur.rotationY - 0.5) * 2 * spin + dt * spin * 0.3;
         rz += dt * (cur.rotationZ - 0.5) * 2 * spin;
@@ -111,7 +115,7 @@ export const torusField: VisualTemplate = {
         p.rotateX(rx);
         p.rotateY(ry);
         p.rotateZ(rz);
-        p.strokeWeight(0.5 + cur.lineWeight * 2.5);
+        p.strokeWeight(0.5 + cur.lineWeight * 2.5 + au.treble * 1.5);
 
         // central object
         const c0 = paletteColor(p, cur.palette, 0.5, cur.contrast, 90);
@@ -120,8 +124,8 @@ export const torusField: VisualTemplate = {
         wavyTorus(p, cr, cr * 0.42, cur.turbulence * 0.8);
 
         // orbiting field
-        const count = Math.round(4 + cur.density * 12);
-        const wob = 1 + cur.turbulence * 0.8;
+        const count = Math.min(orbiters.length, Math.round(4 + cur.density * 12 + au.beat * 4));
+        const wob = 1 + cur.turbulence * 0.8 + au.bass * 0.6;
         for (let i = 0; i < count; i++) {
           const o = orbiters[i] as Orbiter;
           const a = o.angle + rz * o.speed * 0.5;

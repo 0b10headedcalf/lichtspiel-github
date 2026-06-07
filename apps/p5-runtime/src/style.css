@@ -695,3 +695,136 @@ body {
   color: var(--muted);
   font-size: 10px;
 }
+
+/* ── Audio-reactive distortion overlay + panel ────────────────────── */
+
+/* The WebGL post-process canvas, stacked over the p5 stage. Sits above the
+   canvas (z auto) but below the NOW/NEXT strip (z 5) so transport stays legible.
+   Hidden by default → the pristine p5 canvas shows through. */
+.distortion-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  display: none;
+  z-index: 4;
+}
+.distortion-overlay.shown {
+  display: block;
+}
+
+.audio-panel {
+  position: fixed;
+  left: 312px;
+  bottom: 12px;
+  width: 264px;
+  padding: 8px 10px;
+  background: var(--panel-metal);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.4;
+  backdrop-filter: var(--frost);
+  z-index: 112;
+  display: none;
+}
+.audio-panel.shown {
+  display: block;
+}
+.ap-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.ap-title {
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  flex: 1;
+}
+.ap-status {
+  color: var(--muted);
+  font-size: 10px;
+}
+.ap-beat {
+  color: var(--live);
+  opacity: 0.2;
+  transition: opacity 0.05s linear;
+}
+.ap-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.audio-panel button {
+  flex: 1;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 10px;
+  color: var(--text);
+  background: var(--metal);
+  border: 1px solid var(--metal-edge);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.audio-panel button.on {
+  background: var(--metal-active);
+  color: var(--on-accent);
+}
+.ap-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 3px 0;
+  color: var(--muted);
+}
+.ap-field > span {
+  flex: 0 0 72px;
+}
+.ap-field select,
+.ap-field input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 10px;
+  accent-color: var(--accent);
+}
+.ap-meters {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ap-meter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ap-meter > span {
+  flex: 0 0 30px;
+  color: var(--dim);
+  font-size: 10px;
+}
+.ap-bar {
+  flex: 1;
+  height: 5px;
+  background: var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ap-bar > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.06s linear;
+}
+.ap-hint {
+  margin-top: 6px;
+  color: var(--dim);
+  font-size: 9px;
+  line-height: 1.3;
+}
