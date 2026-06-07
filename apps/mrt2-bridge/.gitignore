@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+*.log
+logs/
+coverage/
+.DS_Store
+
+# Python sidecar artifacts
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# never commit model weights / audio
+models/
+weights/
+*.mlxfn
+*.safetensors
+*.wav
