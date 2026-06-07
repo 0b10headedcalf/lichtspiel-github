@@ -11,6 +11,14 @@ dependencies = []
 [project.optional-dependencies]
 server = ["fastapi>=0.115", "uvicorn>=0.32"]
 embed = ["numpy>=1.26", "transformers>=4.44", "torch>=2.2"]
+# Phase 7 audio retrieval via Stable Audio 3's SAME autoencoder — a DISTINCT
+# embedding axis from `embed`'s text/MIDI path. SA3 is a LOCAL checkout (not on
+# PyPI) and pulls its own pinned torch; edit the path for your machine, or
+# install it editable: uv pip install -e /path/to/stable-audio-3
+embed-sa3 = [
+  "numpy>=1.26",
+  "stable-audio-3 @ file:///Volumes/Mac-Storage/GitHub/stable-audio-3",
+]
 # Generative track (G1 vibe + G3 codegen). Heavy + build-time only.
 #   vibe    = CLAP audio->text via transformers ClapModel (laion/larger_clap_general,
 #             cached under the HF hub) + librosa MIR. NOTE: torch is listed

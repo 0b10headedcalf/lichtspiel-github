@@ -48,7 +48,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
-            self._send(200, {"ok": True, "mode": os.environ.get("LICHTSPIEL_RETRIEVAL_MODE", "metadata")})
+            # Lazy import so a metadata-mode service never pays the embed import.
+            from .embed_audio import embedding_available
+
+            self._send(
+                200,
+                {
+                    "ok": True,
+                    "mode": os.environ.get("LICHTSPIEL_RETRIEVAL_MODE", "metadata"),
+                    "embedAvailable": embedding_available(),
+                },
+            )
         else:
             self._send(404, {"error": "not found"})
 
