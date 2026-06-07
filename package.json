@@ -20,7 +20,13 @@
     "lint": "pnpm -r lint",
     "validate:schemas": "pnpm --filter @lichtspiel/schemas validate",
     "smoke:p5": "pnpm --filter @lichtspiel/p5-runtime smoke",
-    "send": "pnpm --filter @lichtspiel/live-bridge cli"
+    "send": "pnpm --filter @lichtspiel/live-bridge cli",
+    "dev:desktop": "pnpm --filter @lichtspiel/desktop start",
+    "dmg:desktop": "pnpm --filter @lichtspiel/desktop dmg",
+    "demo:mrt2": "pnpm --filter @lichtspiel/mrt2-bridge demo",
+    "dev:mrt2": "pnpm --filter @lichtspiel/mrt2-bridge dev",
+    "test:mrt2": "pnpm --filter @lichtspiel/mrt2-bridge test",
+    "health:mrt2": "pnpm --filter @lichtspiel/mrt2-bridge health"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

@@ -1,9 +1,13 @@
 packages:
   - 'apps/p5-runtime'
   - 'apps/live-bridge'
+  - 'apps/desktop'
+  - 'apps/mrt2-bridge'
   - 'packages/*'
 allowBuilds:
   esbuild: true
+  electron: true
+  vitest: true
 
 # apps/ml-service is a Python project (uv / venv) and is intentionally
 # excluded from the pnpm workspace.
