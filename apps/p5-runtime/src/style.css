@@ -54,6 +54,8 @@ body {
   grid-template-columns: var(--left-col) 1fr var(--right-col);
   background: var(--bg);
   color: var(--text);
+  /* Smooth the open/close: track widths interpolate as lengths (440px ↔ 0). */
+  transition: grid-template-columns 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 /* Collapsed: shrink the side TRACK to 0 but keep the rail IN the grid (display:none
    would re-flow the remaining items into the wrong columns), and clip its content. */
@@ -113,6 +115,9 @@ body {
   padding: 16px 20px;
   background: var(--panel-metal);
   backdrop-filter: var(--frost);
+  transition:
+    padding 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.28s ease;
 }
 #left-rail {
   border-right: 1px solid var(--line);
@@ -180,20 +185,37 @@ body {
   display: block;
 }
 
+/* Autohiding top bar: rests off the top edge with the handle peeking, slides
+   down on hover (the chat-dock trick, flipped to the top). */
 .now-next {
   position: absolute;
-  top: 14px;
+  top: 0;
   left: 50%;
-  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 5;
+  transform: translateX(-50%) translateY(calc(-100% + 14px));
+  transition: transform 0.22s ease;
+}
+.now-next:hover {
+  transform: translateX(-50%) translateY(0);
+}
+.nn-row {
   display: flex;
   gap: 28px;
   padding: 8px 16px;
   background: var(--panel-metal);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 0 0 8px 8px;
   backdrop-filter: var(--frost);
-  z-index: 5;
-  pointer-events: none;
+}
+.nn-handle {
+  width: 46px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(30, 32, 34, 0.35);
 }
 .nn-cell {
   display: flex;
@@ -238,32 +260,7 @@ body {
   color: var(--live);
 }
 
-/* ── Autohiding chat dock (center bottom) ─────────────────────────── */
-/* Rests just off-screen with a small handle peeking; slides up on hover/focus. */
-.chat-dock {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  width: min(560px, 76%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding-bottom: 12px;
-  transform: translateX(-50%) translateY(calc(100% - 14px));
-  transition: transform 0.22s ease;
-  z-index: 6;
-}
-.chat-dock:hover,
-.chat-dock:focus-within {
-  transform: translateX(-50%) translateY(0);
-}
-.chat-handle {
-  width: 46px;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(30, 32, 34, 0.35);
-}
+/* ── Text input (shared) — used by the Dream prompt in the Discover menu. ── */
 .chat-box {
   width: 100%;
   padding: 10px 14px;
@@ -694,4 +691,82 @@ body {
 .gp-vaxes {
   color: var(--muted);
   font-size: 10px;
+}
+
+/* ── Discover menu (generative track) — trigger + inline Sync/Dream. ────── */
+.discover-btn {
+  display: block;
+  width: 100%;
+  font-size: 12px;
+  padding: 8px 16px;
+  letter-spacing: 0.04em;
+}
+.discover-btn:disabled {
+  cursor: progress;
+  filter: brightness(0.96) saturate(0.6);
+}
+/* Sync/Dream row + Dream prompt row — hidden until the matching state class.
+   Inline reveal (not absolute) so the rail's overflow doesn't clip them. */
+.discover-menu,
+.discover-dream {
+  display: none;
+  gap: 6px;
+  margin-top: 8px;
+}
+.discover.menu-open .discover-menu {
+  display: flex;
+}
+.discover.dream-open .discover-dream {
+  display: flex;
+}
+.discover-mode {
+  position: relative; /* tooltip anchor */
+  flex: 1;
+  font-size: 11px;
+  padding: 7px 8px;
+}
+.discover-prompt {
+  flex: 1;
+  padding: 7px 10px;
+}
+.discover-go {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+}
+/* Status / progress / error line under the menu (empty ⇒ no margin). */
+.discover-status {
+  font-size: 10px;
+  line-height: 1.4;
+}
+.discover-status:not(:empty) {
+  margin-top: 8px;
+}
+.discover-status.info {
+  color: var(--muted);
+}
+.discover-status.ok {
+  color: var(--live);
+}
+.discover-status.error {
+  color: #a3372e;
+}
+/* Pure-CSS hover tip below a mode button (wraps; native title is the fallback). */
+.discover-mode[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  padding: 6px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: rgba(38, 40, 43, 0.92);
+  color: var(--on-accent);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  z-index: 10;
 }

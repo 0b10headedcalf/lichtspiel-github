@@ -23,6 +23,18 @@ export class TemplateRegistry {
     for (const t of templates) this.register(t);
   }
 
+  /**
+   * Insert or replace by id (the generative track re-loads a regenerated
+   * template under the same id). New ids append to the order; existing ids keep
+   * their slot so keyboard/grid positions stay stable across a regen.
+   */
+  upsert(template: VisualTemplate): void {
+    const i = this.indexOf(template.id);
+    this.byId.set(template.id, template);
+    if (i < 0) this.order.push(template);
+    else this.order[i] = template;
+  }
+
   get(id: string): VisualTemplate | undefined {
     return this.byId.get(id);
   }

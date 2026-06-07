@@ -12,5 +12,6 @@ export default defineConfig({
   define: {
     __BRIDGE_WS_PORT__: JSON.stringify(process.env['LICHTSPIEL_BRIDGE_WS_PORT'] ?? '7890'),
     __BIND_HOST__: JSON.stringify(process.env['LICHTSPIEL_BIND_HOST'] ?? '127.0.0.1'),
+    __ML_PORT__: JSON.stringify(process.env['LICHTSPIEL_ML_PORT'] ?? '7892'),
   },
 });

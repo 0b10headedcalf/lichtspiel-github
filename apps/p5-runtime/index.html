@@ -24,35 +24,40 @@
       <!-- Shown only when the left rail is collapsed — the way back. -->
       <button id="left-expand" class="rail-expand left-expand" title="Show rail">&raquo;</button>
 
-      <!-- CENTER — live p5 visual with a NOW / NEXT transport strip. -->
+      <!-- CENTER — live p5 visual with an autohiding NOW / NEXT top bar. -->
       <main id="center">
         <div id="stage"></div>
+        <!-- Autohiding top bar: rests off the top edge with a handle peeking,
+             slides down on hover. -->
         <div id="now-next" class="now-next">
-          <div class="nn-cell">
-            <span class="nn-label">NOW</span>
-            <span id="nn-now" class="nn-value">—</span>
+          <div class="nn-row">
+            <div class="nn-cell">
+              <span class="nn-label">NOW</span>
+              <span id="nn-now" class="nn-value">—</span>
+            </div>
+            <div class="nn-cell">
+              <span class="nn-label">NEXT</span>
+              <span id="nn-next" class="nn-value">—</span>
+            </div>
           </div>
-          <div class="nn-cell">
-            <span class="nn-label">NEXT</span>
-            <span id="nn-next" class="nn-value">—</span>
-          </div>
-        </div>
-        <!-- Autohiding chat dock: peeks at the bottom, slides up on hover. -->
-        <div id="chat-dock" class="chat-dock">
-          <div class="chat-handle"></div>
-          <input class="chat-box" type="text" placeholder="Chat box goes here?" />
+          <div class="nn-handle"></div>
         </div>
       </main>
 
       <!-- Shown only when the right rail is collapsed — the way back. -->
       <button id="right-expand" class="rail-expand right-expand" title="Show panel">&laquo;</button>
 
-      <!-- RIGHT RAIL — Ableton status + mapping (locators / scenes) + chat. -->
+      <!-- RIGHT RAIL — Generate · Ableton status + mapping (locators / scenes) · chat. -->
       <aside id="right-rail" class="rail">
         <header class="rail-status">
           <button id="right-collapse" class="brand-collapse" title="Collapse panel">&raquo;</button>
           <span id="conn" class="conn">browser-only</span>
         </header>
+        <!-- Generative track: the Discover button mounts here. -->
+        <section class="rail-section">
+          <h2 class="rail-h">Generate</h2>
+          <div id="discover-mount"></div>
+        </section>
         <!-- The Ableton mapping panel mounts here. -->
         <section id="mapping-mount" class="rail-section"></section>
       </aside>

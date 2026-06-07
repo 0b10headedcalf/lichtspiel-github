@@ -13,6 +13,7 @@
     "dev:p5": "pnpm --filter @lichtspiel/p5-runtime dev",
     "dev:bridge": "pnpm --filter @lichtspiel/live-bridge dev",
     "dev:feeder": "node apps/live-bridge/demo-feeder.mjs",
+    "dev:ml": "cd apps/ml-service && PYTHONPATH=src .venv/bin/python -m lichtspiel_ml.app",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r --no-bail typecheck",
     "test": "pnpm -r test",

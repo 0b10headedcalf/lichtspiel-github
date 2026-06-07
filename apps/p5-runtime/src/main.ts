@@ -45,6 +45,8 @@ import {
 import { mergeSnapshot, parseMapping } from './live/abletonMappings.js';
 import { TakeoverClock } from './live/takeoverClock.js';
 import { AbletonMappingPanel } from './ui/abletonMappingPanel.js';
+import { DiscoverButton } from './ui/discoverButton.js';
+import { generateVisual, type GenerateRequest } from './live/generateVisual.js';
 import { createRng, randomSeed } from './seededRng.js';
 import type { VisualTemplate } from './visualTemplate.js';
 
@@ -59,11 +61,24 @@ const mappingMount = document.getElementById('mapping-mount') as HTMLElement;
 const nnNow = document.getElementById('nn-now') as HTMLElement;
 const nnNext = document.getElementById('nn-next') as HTMLElement;
 
+// The rail columns now ANIMATE (CSS transition, 0.28s) instead of snapping, so a
+// single resize fires while the column is still mid-animation → the canvas locks to
+// the wrong size and the fullscreen view never fills. Pump resize across the whole
+// transition so the p5 canvas tracks the animating column to its final width.
+const RAIL_ANIM_MS = 280;
+const pumpResizeDuringTransition = (): void => {
+  const start = performance.now();
+  const tick = (): void => {
+    window.dispatchEvent(new Event('resize'));
+    if (performance.now() - start < RAIL_ANIM_MS) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+};
+
 // Left-rail collapse: « (in the rail) hides it, » (over the canvas) brings it back.
-// SketchHost re-fits the canvas on window resize, so nudge it after the column changes.
 const setLeftCollapsed = (collapsed: boolean): void => {
   document.getElementById('app')?.classList.toggle('left-collapsed', collapsed);
-  window.dispatchEvent(new Event('resize'));
+  pumpResizeDuringTransition();
 };
 document.getElementById('left-collapse')?.addEventListener('click', () => setLeftCollapsed(true));
 document.getElementById('left-expand')?.addEventListener('click', () => setLeftCollapsed(false));
@@ -71,7 +86,7 @@ document.getElementById('left-expand')?.addEventListener('click', () => setLeftC
 // Right-rail collapse: » (in the rail) hides it, « (over the canvas) brings it back.
 const setRightCollapsed = (collapsed: boolean): void => {
   document.getElementById('app')?.classList.toggle('right-collapsed', collapsed);
-  window.dispatchEvent(new Event('resize'));
+  pumpResizeDuringTransition();
 };
 document.getElementById('right-collapse')?.addEventListener('click', () => setRightCollapsed(true));
 document.getElementById('right-expand')?.addEventListener('click', () => setRightCollapsed(false));
@@ -249,6 +264,79 @@ let bridgeConnected = false; // drives bridge-vs-local for Refresh/Save/Load (Ph
 // at the active variant + refreshes the panel.
 const panel = new GesturalPanel();
 const panelEl = document.querySelector('.gestural-panel') as HTMLElement | null;
+
+// Discover button (generative track) — one click asks the backend to synthesize a
+// fresh template from the current working track. See docs/generative-architecture.md.
+// Mounts in the right rail's "Generate" section.
+const discoverMount = document.getElementById('discover-mount') as HTMLElement;
+const discoverButton = new DiscoverButton(
+  {
+    // Sync: audio → CLAP vibe → template. No prompt ⇒ the ml-service encodes the
+    // current working track (newest exported clip).
+    onSync: () => void runGenerate({ mode: 'sync', divergence: 0.6 }),
+    // Dream: natural-language → template (no audio). The typed description is the brief.
+    onDream: (prompt) => void runGenerate({ mode: 'dream', prompt, divergence: 0.6 }),
+  },
+  discoverMount,
+);
+
+/**
+ * Kick off a generation request: the ml-service runs (audio or prompt) → Claude
+ * codegen and writes a fresh template `.ts`; we then dynamic-import it from the
+ * Vite dev server, register it, and switch to it — no manual reload. Authoring
+ * action (dev only), off the render path. Sync vs Dream differ only by whether
+ * `req.prompt` is set.
+ */
+async function runGenerate(req: GenerateRequest): Promise<void> {
+  discoverButton.setBusy(true);
+  discoverButton.setStatus(req.mode === 'dream' ? 'Dreaming…' : 'Syncing audio…', 'info');
+  try {
+    // audioFilePath omitted ⇒ the ml-service picks the newest clip from the
+    // watched export folder (LICHTSPIEL_AUDIO_WATCH_DIR).
+    const res = await generateVisual(req);
+    if (!res.ok || !res.templateId) {
+      // ml-service reached but generation failed (bad key, validation, no audio…).
+      const why = res.error ?? res.issues?.join('; ') ?? 'unknown error';
+      console.error('[generate] failed:', why);
+      discoverButton.setStatus(`Failed: ${why}`, 'error');
+      return;
+    }
+    const tpl = await loadGeneratedTemplate(res.templateId);
+    if (!tpl) {
+      discoverButton.setStatus(`Generated ${res.templateId} but couldn't load it`, 'error');
+      return;
+    }
+    registry.upsert(tpl);
+    selectScene(tpl, true);
+    console.info(`[generate] loaded "${tpl.name}" — vibe: ${res.vibe?.text ?? '?'}`);
+    discoverButton.setStatus(`Loaded "${tpl.name}"`, 'ok');
+  } catch (err) {
+    // Transport failure ⇒ the ml-service almost certainly isn't running.
+    console.error('[generate] request error', err);
+    discoverButton.setStatus(
+      `Can't reach the ml-service on :${__ML_PORT__}. Start it with "pnpm dev:ml".`,
+      'error',
+    );
+  } finally {
+    discoverButton.setBusy(false);
+  }
+}
+
+/**
+ * Dev-only: dynamic-import a freshly written generated template by id. Vite
+ * serves source under /src in dev; `@vite-ignore` keeps it a runtime import (the
+ * file is created after build-time analysis) and `?t=` cache-busts a regen.
+ */
+async function loadGeneratedTemplate(id: string): Promise<VisualTemplate | undefined> {
+  const url = `/src/templates/generated/${id}.ts?t=${Date.now()}`;
+  const mod = (await import(/* @vite-ignore */ url)) as Record<string, VisualTemplate>;
+  const tpl = mod[id];
+  if (!tpl?.create) {
+    console.error(`[generate] module "${id}" has no exported VisualTemplate named "${id}"`);
+    return undefined;
+  }
+  return tpl;
+}
 
 /** Performer-intent params preserved across a scene/variant re-mount. */
 function keepParams(): Partial<VisualParamVector> {

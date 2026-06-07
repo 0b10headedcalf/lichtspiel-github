@@ -4,5 +4,7 @@
     "outDir": "dist",
     "noEmit": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "_comment_generated": "generated/ holds gitignored, LLM-authored scratch templates. A rough first-pass generation must not break the repo `pnpm typecheck` gate — it is typechecked on demand by the generation self-repair loop instead. Promoting one to the corpus moves it out of generated/ into the typechecked tree.",
+  "exclude": ["src/templates/generated"]
 }
