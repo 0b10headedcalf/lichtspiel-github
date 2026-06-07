@@ -8,6 +8,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { wire } from '@lichtspiel/schemas';
 import { BridgeServer } from './websocketServer.js';
+import { MlClient } from './mlClient.js';
 import { OscRouter } from './oscRouter.js';
 import { SerialOsc } from './serialosc.js';
 import { MappingStore } from './mappingStore.js';
@@ -18,6 +19,13 @@ const host = process.env['LICHTSPIEL_BIND_HOST'] ?? '127.0.0.1';
 const wsPort = Number(process.env['LICHTSPIEL_BRIDGE_WS_PORT'] ?? 7890);
 const httpPort = Number(process.env['LICHTSPIEL_BRIDGE_HTTP_PORT'] ?? 7891);
 const prefix = process.env['LICHTSPIEL_OSC_PREFIX'] ?? '/lichtspiel';
+
+// Phase 5/7 — retrieval sidecar. The bridge POSTs each live.state to the
+// Python ml-service and relays its scene choice to p5. Disable with
+// LICHTSPIEL_ML_AUTORETRIEVE=0 (the runtime then stays purely manual/CLI-driven).
+const mlPort = Number(process.env['LICHTSPIEL_ML_PORT'] ?? 7892);
+const mlAutoRetrieve = process.env['LICHTSPIEL_ML_AUTORETRIEVE'] !== '0';
+const mlClient = new MlClient({ host, port: mlPort, enabled: mlAutoRetrieve });
 
 // Phase 5b — Ableton snapshot + mapping persistence. The store owns the
 // authoritative JSON files (config/ableton-mappings/*.json); the snapshot reads
@@ -41,8 +49,16 @@ const server = new BridgeServer({
   onLedFrame: (frame) => serial?.flushLeds(frame),
   snapshot: () => snapshotAbleton({ abletonPort, forceFixture }),
   mappingStore,
+  mlClient,
 });
 server.start();
+// Probe ml-service connectivity once so /status reflects it (retrieval itself
+// is driven by inbound live.state; this is just for the status line).
+if (mlAutoRetrieve) {
+  void mlClient.probeHealth().then(() => {
+    logger.info(`ml-service ${mlClient.isConnected ? 'reachable' : 'offline'} at ${host}:${mlPort}`);
+  });
+}
 
 const osc = new OscRouter({
   host,
@@ -88,6 +104,14 @@ const http = createServer((req, res) => {
   }
   res.setHeader('content-type', 'text/plain');
   res.end('lichtspiel live-bridge — see /status\n');
+});
+// The status route is non-essential; a port conflict (another bridge already on
+// :7891 — e.g. the dev stack while the packaged Electron app launches) must not
+// crash the process. Mirror the WS/OSC/serialosc layers: log and carry on.
+// Without this, the server's async 'error' is unhandled and throws, killing the
+// bridge — and, bundled into apps/desktop, the whole Electron app.
+http.on('error', (err) => {
+  logger.warn('status http failed to bind (continuing without it)', { error: String(err) });
 });
 http.listen(httpPort, host, () => {
   logger.info(`status http on http://${host}:${httpPort}/status`);

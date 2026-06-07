@@ -19,6 +19,7 @@ import {
 } from '@lichtspiel/schemas';
 import { logger } from './log.js';
 import type { MappingStore } from './mappingStore.js';
+import type { MlClient } from './mlClient.js';
 import { validate } from './validate.js';
 
 interface Client {
@@ -38,6 +39,12 @@ export interface BridgeServerOptions {
   snapshot?: () => Promise<AbletonSnapshot>;
   /** Persist / list scene-locator mappings as JSON (Phase 5b). */
   mappingStore?: MappingStore;
+  /**
+   * ML retrieval sidecar client (Phase 5/7). When present, each valid
+   * `live.state` is POSTed to the sidecar and its `retrieval.result` is fanned
+   * out to p5. Absent ⇒ no auto-retrieval (purely manual / CLI-driven).
+   */
+  mlClient?: MlClient;
 }
 
 export class BridgeServer {
@@ -54,6 +61,8 @@ export class BridgeServer {
 
   constructor(opts: BridgeServerOptions) {
     this.opts = opts;
+    // Reflect ml-service connectivity in /status as it flips.
+    if (opts.mlClient) opts.mlClient.onConnectedChange = () => this.emitStatus();
   }
 
   start(): void {
@@ -217,7 +226,18 @@ export class BridgeServer {
         valid: v.valid,
         error: v.error,
       });
-      if (v.valid) this.broadcast(['p5'], m);
+      if (v.valid) {
+        this.broadcast(['p5'], m);
+        // Phase 5/7: ask the ML sidecar for a scene and fan its result out to
+        // p5. Fire-and-forget + debounced; any failure is swallowed, and p5
+        // already has the raw state above, so manual control is unaffected.
+        const ml = this.opts.mlClient;
+        if (ml) {
+          void ml.retrieve(m.payload).then((result) => {
+            if (result) this.broadcast(['p5'], wire('retrieval.result', result));
+          });
+        }
+      }
       return;
     }
 
@@ -304,7 +324,7 @@ export class BridgeServer {
       p5Clients,
       maxConnected,
       monomeConnected: this.monomeConnected,
-      mlConnected: false,
+      mlConnected: this.opts.mlClient?.isConnected ?? false,
       ...(this.lastError ? { lastError: this.lastError } : {}),
     };
   }
