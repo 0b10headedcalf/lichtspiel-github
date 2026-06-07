@@ -1,0 +1,56 @@
+{
+  "scenes": [
+    {
+      "id": "scene-001",
+      "name": "Desert Ritual",
+      "index": 0,
+      "promptBlend": [
+        {
+          "promptId": "ceremonial-percussion",
+          "text": "ceremonial percussion",
+          "weight": 0.7
+        },
+        {
+          "promptId": "dusty-ambient-electronics",
+          "text": "dusty ambient electronics",
+          "weight": 0.3
+        }
+      ],
+      "visualCluster": "sand-metal-organic",
+      "semanticPosition": {
+        "x": 0.42,
+        "y": 0.67,
+        "z": 0.25
+      },
+      "mutation": 0.35,
+      "energy": 0.6,
+      "density": 0.5
+    },
+    {
+      "id": "scene-002",
+      "name": "Neon Market",
+      "index": 1,
+      "promptBlend": [
+        {
+          "promptId": "mutating-synth-bass",
+          "text": "mutating synth bass",
+          "weight": 0.5
+        },
+        {
+          "promptId": "fractured-latin-percussion",
+          "text": "fractured latin percussion",
+          "weight": 0.5
+        }
+      ],
+      "visualCluster": "neon-grid-organic",
+      "semanticPosition": {
+        "x": 0.75,
+        "y": 0.35,
+        "z": 0.6
+      },
+      "mutation": 0.55,
+      "energy": 0.8,
+      "density": 0.7
+    }
+  ]
+}
