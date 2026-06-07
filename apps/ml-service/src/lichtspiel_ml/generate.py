@@ -28,9 +28,18 @@ def _latest_export() -> str:
     watch = os.environ.get("LICHTSPIEL_AUDIO_WATCH_DIR")
     if not watch:
         raise ValueError("no audioFilePath given and LICHTSPIEL_AUDIO_WATCH_DIR is unset")
-    clips = [p for p in Path(watch).expanduser().glob("*") if p.suffix.lower() in _AUDIO_EXTS]
+    base = Path(watch).expanduser()
+    if not base.is_absolute():
+        # .env declares the watch dir relative to the repo root, but the service
+        # runs with cwd=apps/ml-service — resolve against the .env's directory
+        # (recorded by load_dotenv), falling back to cwd.
+        root = os.environ.get("LICHTSPIEL_ENV_ROOT")
+        candidates = [Path(root) / base] if root else []
+        candidates.append(Path.cwd() / base)
+        base = next((c for c in candidates if c.is_dir()), candidates[0])
+    clips = [p for p in base.glob("*") if p.suffix.lower() in _AUDIO_EXTS]
     if not clips:
-        raise FileNotFoundError(f"no audio clips in watch dir {watch}")
+        raise FileNotFoundError(f"no audio clips in watch dir {base}")
     return str(max(clips, key=lambda p: p.stat().st_mtime))
 
 

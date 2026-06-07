@@ -176,6 +176,30 @@ const host = new SketchHost({
 
 let locked = false;
 
+// Per-tab persistence of the performance state a reload must not eat: the
+// active template + the lock. A reload can arrive at the worst moment (Vite
+// config change, manual refresh) — without this, the stage falls back to the
+// first registry slot and the lock silently disengages mid-set.
+const SCENE_SS = 'lichtspiel.activeScene';
+const LOCK_SS = 'lichtspiel.locked';
+
+/** Single authority for the visual lock — keeps the HUD, the mapping panel, and
+ * the over-canvas badge in sync. The lock silently swallows every Ableton
+ * trigger, and Space (Live's play/stop key) toggles it, so its state must
+ * always be loudly visible. */
+function setLocked(v: boolean): void {
+  locked = v;
+  debug.setLock(locked);
+  mappingPanel.setLock(locked);
+  document.getElementById('lock-badge')?.toggleAttribute('hidden', !locked);
+  try {
+    sessionStorage.setItem(LOCK_SS, locked ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+  console.info(`[lichtspiel] visual lock ${locked ? 'ON — Ableton triggers suppressed' : 'off'}`);
+}
+
 // ── Ableton auto-retrieval state (Phase 5a) ──────────────────────────
 // Two on-screen toggles: retrieval mode (mapped ⇄ random, key `m`) and event
 // source (live OSC ⇄ simulated UI events, key `e`).
@@ -308,9 +332,14 @@ async function runGenerate(req: GenerateRequest): Promise<void> {
       return;
     }
     registry.upsert(tpl);
+    rememberGenerated(tpl.id);
     selectScene(tpl, true);
+    // Hold the new sketch on stage: with a set playing, scene/locator triggers
+    // fire every few seconds and would stomp it within moments of loading.
+    // Lock until the performer releases (Space) — the badge says how.
+    setLocked(true);
     console.info(`[generate] loaded "${tpl.name}" — vibe: ${res.vibe?.text ?? '?'}`);
-    discoverButton.setStatus(`Loaded "${tpl.name}"`, 'ok');
+    discoverButton.setStatus(`Loaded "${tpl.name}" — held on stage (Space releases)`, 'ok');
   } catch (err) {
     // Transport failure ⇒ the ml-service almost certainly isn't running.
     console.error('[generate] request error', err);
@@ -321,6 +350,49 @@ async function runGenerate(req: GenerateRequest): Promise<void> {
   } finally {
     discoverButton.setBusy(false);
   }
+}
+
+// Generated-template persistence: ids live in localStorage so a reload (manual
+// or Vite HMR) re-registers every previously dreamed/synced sketch instead of
+// silently dropping them from the registry. Files that vanished are pruned.
+const GENERATED_LS = 'lichtspiel.generated';
+function generatedIds(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(GENERATED_LS) ?? '[]');
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+function rememberGenerated(id: string): void {
+  try {
+    const ids = generatedIds().filter((i) => i !== id);
+    ids.push(id);
+    localStorage.setItem(GENERATED_LS, JSON.stringify(ids));
+  } catch {
+    /* ignore quota */
+  }
+}
+/** Boot: re-import + register every remembered generated template (dev only). */
+async function restoreGenerated(): Promise<void> {
+  const kept: string[] = [];
+  for (const id of generatedIds()) {
+    try {
+      const tpl = await loadGeneratedTemplate(id);
+      if (tpl) {
+        registry.upsert(tpl);
+        kept.push(id);
+      }
+    } catch {
+      /* file deleted or prod build — prune from the list */
+    }
+  }
+  try {
+    localStorage.setItem(GENERATED_LS, JSON.stringify(kept));
+  } catch {
+    /* ignore quota */
+  }
+  if (kept.length) console.info(`[generate] restored ${kept.length} generated template(s): ${kept.join(', ')}`);
 }
 
 /**
@@ -354,6 +426,13 @@ const variants = createVariantBrowser({
     host.mount(template, { seed, config, params: keepParams() });
     panel.setDictionary(template.gestural);
     panel.setControlMap(host.describeControls()); // hardware-accurate live map
+    // The browser is the single mount authority — every template that reaches
+    // the stage passes through here, so this is where the active id persists.
+    try {
+      sessionStorage.setItem(SCENE_SS, template.id);
+    } catch {
+      /* ignore */
+    }
   },
   onChange: (info) => panel.setVariant(info),
   divergence: 0.6,
@@ -697,11 +776,7 @@ installKeyboard({
     if (t) selectScene(t, true);
   },
   adjust: adjustKey,
-  toggleLock: () => {
-    locked = !locked;
-    debug.setLock(locked);
-    mappingPanel.setLock(locked);
-  },
+  toggleLock: () => setLocked(!locked),
   randomize: doRandomize,
   surprise: doSurprise,
   variant: doVariant,
@@ -768,8 +843,25 @@ setMode('plan'); // boot in PLAN (silver) — everything open for composition
 bus.emit('monome.setup', { grid: GRID_64, arc: ARC_4 });
 if (!abletonMap) applySnapshot({ ...ADE_SLEUTH_SNAPSHOT, signature: signatureOf(ADE_SLEUTH_SNAPSHOT) });
 
-const first = registry.at(0);
-if (first) selectScene(first, true); // mount via the browser so the panel initializes
+// Mount the last-active sketch (per-tab) so a reload — Vite restart, manual
+// refresh — puts the performer back exactly where they were; first slot only on
+// a truly fresh tab. The lock survives the same way: a reload must never
+// silently disengage it (or silently re-engage on a fresh tab).
+const lastSceneId = sessionStorage.getItem(SCENE_SS);
+const bootTpl = (lastSceneId ? registry.get(lastSceneId) : undefined) ?? registry.at(0);
+if (bootTpl) selectScene(bootTpl, true); // mount via the browser so the panel initializes
+if (sessionStorage.getItem(LOCK_SS) === '1') setLocked(true);
+// Re-register previously generated sketches (async; they join the registry +
+// random pools as they load). If the last-active sketch IS a generated one, it
+// only exists after this restore — put it back on stage, unless something else
+// (a trigger, the performer) already moved the stage off the boot template.
+void restoreGenerated().then(() => {
+  if (!lastSceneId || registry.get(lastSceneId) === undefined) return;
+  if (host.currentTemplateId() !== (bootTpl?.id ?? '')) return; // stage moved on
+  if (host.currentTemplateId() === lastSceneId) return; // already there
+  const tpl = registry.get(lastSceneId);
+  if (tpl) selectScene(tpl, true);
+});
 console.info(
   `[lichtspiel] p5 runtime up — ${registry.size} templates. ` +
     `Press 'd' HUD · 'g' twin · 'h' gestures · 'a' Ableton mapping · 'v/c/,/.' variants. ` +

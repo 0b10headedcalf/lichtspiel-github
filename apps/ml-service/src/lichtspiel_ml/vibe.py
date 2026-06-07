@@ -4,10 +4,11 @@ Pipeline: an exported audio clip → CLAP zero-shot tags (mood / genre / energy 
 texture) + librosa MIR (tempo / key / brightness) → a short natural-language
 "vibe" string + a structured tag dict. The vibe feeds codegen.py (the LLM brief).
 
-All heavy deps (torch / laion_clap / librosa) are imported LAZILY so the base
+All heavy deps (torch / transformers / librosa) are imported LAZILY so the base
 ml-service stays stdlib-only and installable; if a dep is missing we degrade
 (CLAP missing → MIR-only vibe; everything missing → a tempo-less stub) instead
-of crashing. Models/weights are cached by laion_clap under the HF cache.
+of crashing. CLAP = transformers ClapModel (laion/larger_clap_general), weights
+cached under the HF hub.
 
 See docs/generative-architecture.md (CLAP = LAION-CLAP, MIR = librosa).
 """
@@ -121,42 +122,76 @@ def _mir_features(audio_path: str) -> dict[str, Any]:
 
 
 # ── CLAP zero-shot tags ──────────────────────────────────────────────────────
+#
+# Backend: transformers' ClapModel (default `laion/larger_clap_general`, already
+# cached under the HF hub) rather than the `laion_clap` package — laion_clap
+# doesn't declare torch, downloads a separate ~2 GB .pt checkpoint on first use,
+# and drags a fragile dep tree (torchlibrosa/webdataset/numpy<2 pins). The
+# transformers route reuses the cached weights and the deps we install anyway.
 
-_clap_model = None  # module-level cache; loading the checkpoint is slow
+# CLAP audio towers are trained on 48 kHz input.
+_CLAP_SR = 48000
+# Override via env to try other CLAP variants (e.g. laion/clap-htsat-unfused).
+_CLAP_MODEL_ENV = "LICHTSPIEL_CLAP_MODEL"
+_CLAP_MODEL_DEFAULT = "laion/larger_clap_general"
+
+_clap = None  # module-level (model, processor) cache; loading the weights is slow
 
 
 def _load_clap():
-    global _clap_model
-    if _clap_model is not None:
-        return _clap_model
+    global _clap
+    if _clap is not None:
+        return _clap
     try:
-        import laion_clap  # type: ignore
+        import os
+
+        from transformers import ClapModel, ClapProcessor  # type: ignore
     except ImportError:
         return None
-    model = laion_clap.CLAP_Module(enable_fusion=False)
-    model.load_ckpt()  # downloads + caches the default music checkpoint
-    _clap_model = model
-    return model
+    name = os.environ.get(_CLAP_MODEL_ENV, _CLAP_MODEL_DEFAULT)
+    model = ClapModel.from_pretrained(name)
+    model.eval()
+    processor = ClapProcessor.from_pretrained(name)
+    _clap = (model, processor)
+    return _clap
 
 
 def _clap_tags(audio_path: str) -> dict[str, list[str]]:
-    """Zero-shot top phrases per VIBE_VOCAB category. {} if CLAP absent."""
-    model = _load_clap()
-    if model is None:
+    """Zero-shot top phrases per VIBE_VOCAB category. {} if CLAP/torch absent."""
+    loaded = _load_clap()
+    if loaded is None:
         return {}
-    import numpy as np  # type: ignore
+    try:
+        import librosa  # type: ignore
+        import numpy as np  # type: ignore
+        import torch  # type: ignore
+    except ImportError:
+        return {}
+    model, processor = loaded
 
-    audio_emb = model.get_audio_embedding_from_filelist([audio_path], use_tensor=False)[0]
+    y, _ = librosa.load(audio_path, sr=_CLAP_SR, mono=True)
+    if y.size == 0:
+        return {}
 
-    tags: dict[str, list[str]] = {}
-    for category, phrases in VIBE_VOCAB.items():
-        text_emb = model.get_text_embedding(phrases)  # (N, D)
-        # cosine similarity (embeddings are ~unit-norm but normalize to be safe)
-        a = audio_emb / (np.linalg.norm(audio_emb) + 1e-9)
-        t = text_emb / (np.linalg.norm(text_emb, axis=1, keepdims=True) + 1e-9)
-        scores = t @ a
-        order = np.argsort(scores)[::-1][:TOP_K_PER_CATEGORY]
-        tags[category] = [phrases[i] for i in order]
+    # transformers v5 returns a ModelOutput (joint 512-d embedding in
+    # .pooler_output); v4 returned the projected tensor directly.
+    def _embeds(out):  # noqa: ANN001, ANN202 - transformers version shim
+        return out.pooler_output if hasattr(out, "pooler_output") else out
+
+    with torch.no_grad():
+        audio_in = processor(audio=[y], sampling_rate=_CLAP_SR, return_tensors="pt")
+        audio_emb = _embeds(model.get_audio_features(**audio_in))[0].cpu().numpy()  # (D,)
+
+        tags: dict[str, list[str]] = {}
+        for category, phrases in VIBE_VOCAB.items():
+            text_in = processor(text=phrases, return_tensors="pt", padding=True)
+            text_emb = _embeds(model.get_text_features(**text_in)).cpu().numpy()  # (N, D)
+            # cosine similarity (embeddings are ~unit-norm but normalize to be safe)
+            a = audio_emb / (np.linalg.norm(audio_emb) + 1e-9)
+            t = text_emb / (np.linalg.norm(text_emb, axis=1, keepdims=True) + 1e-9)
+            scores = t @ a
+            order = np.argsort(scores)[::-1][:TOP_K_PER_CATEGORY]
+            tags[category] = [phrases[i] for i in order]
     return tags
 
 

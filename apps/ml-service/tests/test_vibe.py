@@ -14,7 +14,11 @@ from unittest import mock
 from lichtspiel_ml import vibe as vibe_mod
 from lichtspiel_ml.vibe import VIBE_VOCAB, Vibe, _describe, describe_audio
 
-_HAS_CLAP = importlib.util.find_spec("laion_clap") is not None
+# CLAP backend = transformers ClapModel (+torch); see vibe.py.
+_HAS_CLAP = (
+    importlib.util.find_spec("transformers") is not None
+    and importlib.util.find_spec("torch") is not None
+)
 _HAS_LIBROSA = importlib.util.find_spec("librosa") is not None
 
 

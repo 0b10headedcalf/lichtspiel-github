@@ -12,9 +12,11 @@ dependencies = []
 server = ["fastapi>=0.115", "uvicorn>=0.32"]
 embed = ["numpy>=1.26", "transformers>=4.44", "torch>=2.2"]
 # Generative track (G1 vibe + G3 codegen). Heavy + build-time only.
-#   vibe    = CLAP audio->text + librosa MIR
+#   vibe    = CLAP audio->text via transformers ClapModel (laion/larger_clap_general,
+#             cached under the HF hub) + librosa MIR. NOTE: torch is listed
+#             explicitly — nothing else pulls it in.
 #   codegen = Claude API
-generate = ["laion-clap>=1.1.6", "librosa>=0.10", "soundfile>=0.12", "anthropic>=0.40"]
+generate = ["torch>=2.2", "transformers>=4.44", "librosa>=0.10", "soundfile>=0.12", "anthropic>=0.40"]
 dev = ["pytest>=8"]
 
 [project.scripts]
