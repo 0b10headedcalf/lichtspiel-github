@@ -1,0 +1,41 @@
+{
+  "name": "@lichtspiel/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lichtspiel desktop shell — an Electron app that bundles the p5 visual runtime (renderer) + the Node live-bridge (main process), packaged as a macOS .dmg.",
+  "main": "main.cjs",
+  "scripts": {
+    "assets": "node scripts/prepare.mjs",
+    "start": "node scripts/prepare.mjs && electron .",
+    "dmg": "node scripts/prepare.mjs && electron-builder --mac dmg",
+    "dmg:only": "electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0"
+  },
+  "build": {
+    "appId": "org.lichtspiel.desktop",
+    "productName": "Lichtspiel",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "package.json",
+      "build/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [
+        "dmg"
+      ],
+      "identity": null
+    },
+    "dmg": {
+      "title": "Lichtspiel ${version}"
+    }
+  }
+}
