@@ -16,6 +16,8 @@ import {
   type NumericParamKey,
   type VisualParamVector,
   ADE_SLEUTH_SNAPSHOT,
+  ARC_4,
+  GRID_64,
   clamp01,
   describeSetup,
   signatureOf,
@@ -48,10 +50,31 @@ import type { VisualTemplate } from './visualTemplate.js';
 
 // ── DOM handles ──────────────────────────────────────────────────────
 const stage = document.getElementById('stage') as HTMLElement;
+const centerEl = document.getElementById('center') as HTMLElement;
 const hud = document.getElementById('hud') as HTMLElement;
 const hudHelp = document.getElementById('hud-help') as HTMLElement;
 const twinEl = document.getElementById('monome-twin') as HTMLElement;
 const connEl = document.getElementById('conn') as HTMLElement;
+const mappingMount = document.getElementById('mapping-mount') as HTMLElement;
+const nnNow = document.getElementById('nn-now') as HTMLElement;
+const nnNext = document.getElementById('nn-next') as HTMLElement;
+
+// Left-rail collapse: « (in the rail) hides it, » (over the canvas) brings it back.
+// SketchHost re-fits the canvas on window resize, so nudge it after the column changes.
+const setLeftCollapsed = (collapsed: boolean): void => {
+  document.getElementById('app')?.classList.toggle('left-collapsed', collapsed);
+  window.dispatchEvent(new Event('resize'));
+};
+document.getElementById('left-collapse')?.addEventListener('click', () => setLeftCollapsed(true));
+document.getElementById('left-expand')?.addEventListener('click', () => setLeftCollapsed(false));
+
+// Right-rail collapse: » (in the rail) hides it, « (over the canvas) brings it back.
+const setRightCollapsed = (collapsed: boolean): void => {
+  document.getElementById('app')?.classList.toggle('right-collapsed', collapsed);
+  window.dispatchEvent(new Event('resize'));
+};
+document.getElementById('right-collapse')?.addEventListener('click', () => setRightCollapsed(true));
+document.getElementById('right-expand')?.addEventListener('click', () => setRightCollapsed(false));
 
 // ── Core wiring ──────────────────────────────────────────────────────
 const bus = createBus();
@@ -99,7 +122,11 @@ function syncTakeover(): void {
 
 const host = new SketchHost({
   parent: stage,
-  getSize: () => ({ width: window.innerWidth, height: window.innerHeight }),
+  // The canvas fills the center column of the dashboard (not the whole window).
+  getSize: () => {
+    const r = centerEl.getBoundingClientRect();
+    return { width: Math.max(1, Math.round(r.width)), height: Math.max(1, Math.round(r.height)) };
+  },
   getSetup: () => devices.active(),
   // Hardware-driven scene/variant control for idiom sketches (e.g. the Opus III
   // hero's extra grid-128 columns → scene-select). selectScene/doVariant are
@@ -221,13 +248,7 @@ let bridgeConnected = false; // drives bridge-vs-local for Refresh/Save/Load (Ph
 // space, live). The browser is the single template-mount authority: it re-mounts
 // at the active variant + refreshes the panel.
 const panel = new GesturalPanel();
-// Keep the panel in the left gutter, just below the HUD — re-anchored whenever the
-// HUD's height changes (async font reflow, or bridge/live state appearing) so it can
-// never overlap the HUD, and on window resize. Clear of the bottom-right twin.
-const layoutPanel = (): void => panel.setTopPx(Math.round(hud.getBoundingClientRect().bottom) + 12);
-layoutPanel();
-window.addEventListener('resize', layoutPanel);
-new ResizeObserver(layoutPanel).observe(hud);
+const panelEl = document.querySelector('.gestural-panel') as HTMLElement | null;
 
 /** Performer-intent params preserved across a scene/variant re-mount. */
 function keepParams(): Partial<VisualParamVector> {
@@ -249,10 +270,18 @@ const variants = createVariantBrowser({
   divergence: 0.6,
 });
 
+/** Reflect the current scene + its registry neighbour in the center NOW/NEXT strip. */
+function updateNowNext(template: VisualTemplate): void {
+  nnNow.textContent = template.name;
+  const next = registry.neighbor(template.id, 1);
+  nnNext.textContent = next?.name ?? '—';
+}
+
 /** Switch scenes. Manual selects always win; bridge/retrieval selects respect lock. */
 function selectScene(template: VisualTemplate, manual: boolean): void {
   if (!manual && locked) return;
   variants.show(template); // mount at the family's current variant + refresh the panel
+  updateNowNext(template);
 }
 
 // Ableton mapping panel (Phase 5b) — top-right, toggle `a`. Edits `mapping`
@@ -318,7 +347,7 @@ const mappingPanel = new AbletonMappingPanel({
     abletonMap = m;
     saveLocalMapping(m);
   },
-});
+}, mappingMount);
 mappingPanel.setMapping(abletonMap);
 mappingPanel.setSource(eventSource);
 mappingPanel.setFallback(retrievalMode);
@@ -369,6 +398,7 @@ function respond(evt: AbletonEvent): void {
   // Parent template → child variant: canonical (signature) or a fresh random one.
   if (d.variantMode === 'canonical') variants.canonical(d.template);
   else variants.newVariant(d.template);
+  updateNowNext(d.template);
   debug.setAbletonEvent(evt, d.template.name);
   mappingPanel.markTriggered(evt, d.template.name);
   bridge.send(
@@ -549,7 +579,9 @@ installKeyboard({
   },
   toggleDebug: () => debug.toggle(),
   toggleEmulator: () => twin.toggle(),
-  toggleGestural: () => panel.toggle(),
+  // The twin now lives permanently in the left rail; `h` reveals the floating
+  // gestural control-map overlay (off by default in the dashboard).
+  toggleGestural: () => panelEl?.classList.toggle('shown'),
   toggleAbletonPanel: () => mappingPanel.toggle(),
   cycleRetrievalMode: () => {
     retrievalMode = retrievalMode === 'mapped' ? 'random' : 'mapped';
@@ -586,6 +618,20 @@ installKeyboard({
 bridge.connect();
 
 // ── Boot ─────────────────────────────────────────────────────────────
+// Dashboard chrome: the twin is permanent in the left rail (start its draw loop),
+// the mapping panel is permanent in the right rail (expand it), and the diagnostic
+// HUD is an opt-in overlay (hidden until `d`).
+twin.toggle();
+mappingPanel.toggle();
+debug.toggle();
+
+// Browser-only dashboard parity: with no real hardware, simulate a Grid 64 + Arc 4
+// so the Gestures rail shows the grid + encoders (real device.attached overrides
+// this), and populate the mapping tables from the ADE_Sleuth fixture if nothing
+// is saved yet, so the dashboard looks live out of the box.
+bus.emit('monome.setup', { grid: GRID_64, arc: ARC_4 });
+if (!abletonMap) applySnapshot({ ...ADE_SLEUTH_SNAPSHOT, signature: signatureOf(ADE_SLEUTH_SNAPSHOT) });
+
 const first = registry.at(0);
 if (first) selectScene(first, true); // mount via the browser so the panel initializes
 console.info(

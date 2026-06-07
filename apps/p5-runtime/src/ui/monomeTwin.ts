@@ -82,9 +82,14 @@ const TEST_BUTTONS: Array<{ id: Exclude<TestMode, null>; label: string }> = [
   { id: 'fast', label: 'Fast ∥' },
 ];
 
-const PAD = 12;
-const GAP = 4;
-const RING_R = 40;
+const PAD = 16;
+const GAP = 6;
+const RING_R = 30;
+/** Outer radius of the brushed-metal dial bezel drawn around each ring. */
+const RING_BEZEL = RING_R + 10;
+/** Center-to-center gap between arc rings — wide enough that the metal bezels
+    clear each other (2·bezel = 80) with room to breathe, not cramped. */
+const RING_SPACING = RING_BEZEL * 2 + 16;
 
 /** Callbacks the twin invokes for takeover mode (the clock + manual BPM live in main). */
 export interface TwinHooks {
@@ -305,11 +310,15 @@ export class MonomeTwin {
     const gridW = cols * (this.cell + GAP);
     const gridH = rows * (this.cell + GAP);
     this.gridOx = PAD;
-    this.gridOy = PAD;
-    const ringsW = enc * (RING_R * 2 + 24);
+    // Arc rings sit ABOVE the grid (the encoders read like dials over the
+    // step-sequencer grid); the grid drops below the arc band when present.
+    // Span the full bezel width; leave a generous gap below the dials.
+    const ringsW = enc > 0 ? (enc - 1) * RING_SPACING + RING_BEZEL * 2 : 0;
+    const arcBand = enc > 0 ? RING_BEZEL * 2 + PAD : 0;
+    this.arcCy = PAD + RING_BEZEL;
+    this.gridOy = PAD + arcBand;
     const logicalW = Math.max(gridW, ringsW) + PAD * 2;
-    this.arcCy = this.gridOy + gridH + PAD + RING_R;
-    const logicalH = this.gridOy + gridH + (enc > 0 ? PAD + RING_R * 2 : 0) + PAD;
+    const logicalH = this.gridOy + gridH + PAD;
     this.sizeCanvas(logicalW, logicalH);
 
     this.label.textContent = `Digital twin — ${describeSetup(this.setup)}`;
@@ -665,7 +674,7 @@ export class MonomeTwin {
     return parseFloat(this.canvas.style.height || '0');
   }
   private ringCx(e: number): number {
-    return this.gridOx + RING_R + e * (RING_R * 2 + 24);
+    return this.gridOx + RING_BEZEL + e * RING_SPACING;
   }
 
   private draw(): void {
@@ -710,7 +719,7 @@ export class MonomeTwin {
           ctx.stroke();
         }
         if (this.cell >= 24) {
-          ctx.fillStyle = level > 8 ? 'rgba(4,16,28,0.9)' : 'rgba(180,210,235,0.55)';
+          ctx.fillStyle = level > 8 ? 'rgba(24,26,28,0.9)' : 'rgba(238,240,242,0.6)';
           ctx.font = '11px ui-monospace, monospace';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
@@ -724,6 +733,22 @@ export class MonomeTwin {
     ctx.textBaseline = 'middle';
     for (let e = 0; e < enc; e++) {
       const cxp = this.ringCx(e);
+      // Brushed-aluminum knob + bezel behind the LED ring — the metallic dial.
+      const knobR = RING_R - 10;
+      const sheen = ctx.createLinearGradient(cxp, this.arcCy - knobR, cxp, this.arcCy + knobR);
+      sheen.addColorStop(0, '#f5f6f7');
+      sheen.addColorStop(0.46, '#d3d6d9');
+      sheen.addColorStop(0.54, '#b7bbbf');
+      sheen.addColorStop(1, '#cdd0d3');
+      ctx.beginPath();
+      ctx.arc(cxp, this.arcCy, knobR, 0, Math.PI * 2);
+      ctx.fillStyle = sheen;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#9b9382'; // bezel edge
+      ctx.beginPath();
+      ctx.arc(cxp, this.arcCy, RING_BEZEL, 0, Math.PI * 2);
+      ctx.stroke();
       for (let i = 0; i < ARC_RING_LEDS; i++) {
         const level = this.arcLevelAt(e, i);
         const a = (i / ARC_RING_LEDS) * Math.PI * 2 - Math.PI / 2;
@@ -736,7 +761,7 @@ export class MonomeTwin {
         ctx.lineTo(cxp + Math.cos(a) * outer, this.arcCy + Math.sin(a) * outer);
         ctx.stroke();
       }
-      ctx.fillStyle = this.arcHeld[e] ? '#8effc0' : 'rgba(180,210,235,0.7)';
+      ctx.fillStyle = this.arcHeld[e] ? '#1c1e20' : 'rgba(38,40,43,0.8)';
       ctx.font = '10px ui-monospace, monospace';
       ctx.fillText(`enc ${e}`, cxp, this.arcCy);
     }
@@ -804,10 +829,12 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 function ledColor(level: number): string {
+  // Monochrome dial-lamp ramp: dark off-pad → bright cool-white backlight.
+  // Neutral grey channels keep the twin in the metallic greyscale palette.
   const t = clamp(level, 0, 15) / 15;
-  const r = Math.round(18 + t * 120);
-  const g = Math.round(28 + t * 178);
-  const b = Math.round(40 + t * 214);
+  const r = Math.round(34 + t * 207);
+  const g = Math.round(36 + t * 207);
+  const b = Math.round(38 + t * 206);
   return `rgb(${r},${g},${b})`;
 }
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {

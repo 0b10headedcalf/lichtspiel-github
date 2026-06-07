@@ -1,6 +1,33 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Palette: silver-face receiver, monochrome — neutral grey chassis, brushed
+     stainless panels & controls, graphite lettering and accents. No warm hues. */
+  --bg: #c9cacb;
+  --rail-bg: #bcbdbf;
+  --line: rgba(30, 32, 34, 0.16);
+  --line-strong: rgba(30, 32, 34, 0.3);
+  --accent: #3f4347;
+  --text: #26282b;
+  --muted: #5e6266;
+  --dim: #888c90;
+  --live: #3f4347;
+  --wood: #4a4d50;
+  --on-accent: #eef0f1;
+  /* Brushed-stainless sheen for buttons & dials (vertical grain). */
+  --metal: linear-gradient(180deg, #f5f6f7 0%, #d3d6d9 46%, #b7bbbf 54%, #e3e5e7 100%);
+  --metal-active: linear-gradient(180deg, #9aa0a5 0%, #70767c 48%, #555a5f 56%, #878d93 100%);
+  --metal-edge: #8c9094;
+  --panel: rgba(238, 239, 240, 0.86);
+  /* Frosted-glass metallic panel fill — translucent neutral silver. Low alpha
+     so the blurred backdrop shows through; saturate <1 keeps it cool grey. */
+  --panel-metal: linear-gradient(
+    135deg,
+    rgba(238, 239, 240, 0.5) 0%,
+    rgba(202, 204, 206, 0.36) 50%,
+    rgba(232, 233, 234, 0.5) 100%
+  );
+  --frost: blur(16px) saturate(0.8);
 }
 
 * {
@@ -12,64 +39,290 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: #000;
+  background: var(--bg);
   overflow: hidden;
 }
 
-#stage {
+/* ── Three-column dashboard shell ─────────────────────────────────── */
+.app-shell {
   position: fixed;
+  inset: 0;
+  display: grid;
+  /* Side-track widths are variables so left/right collapse compose independently. */
+  --left-col: 440px;
+  --right-col: 440px;
+  grid-template-columns: var(--left-col) 1fr var(--right-col);
+  background: var(--bg);
+  color: var(--text);
+}
+/* Collapsed: shrink the side TRACK to 0 but keep the rail IN the grid (display:none
+   would re-flow the remaining items into the wrong columns), and clip its content. */
+.app-shell.left-collapsed {
+  --left-col: 0;
+}
+.app-shell.right-collapsed {
+  --right-col: 0;
+}
+.app-shell.left-collapsed #left-rail {
+  overflow: hidden;
+  padding: 0;
+  border-right: none;
+}
+.app-shell.right-collapsed #right-rail {
+  overflow: hidden;
+  padding: 0;
+  border-left: none;
+}
+
+/* Re-expand affordance — only visible while its rail is collapsed (the collapse
+   button lives inside the rail, so it goes away with it). */
+.rail-expand {
+  display: none;
+  position: fixed;
+  top: 10px;
+  z-index: 120;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 9px;
+  color: var(--muted);
+  background: var(--panel-metal);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  backdrop-filter: var(--frost);
+}
+.rail-expand:hover {
+  color: var(--accent);
+}
+.left-expand {
+  left: 10px;
+}
+.right-expand {
+  right: 10px;
+}
+.app-shell.left-collapsed .left-expand {
+  display: block;
+}
+.app-shell.right-collapsed .right-expand {
+  display: block;
+}
+
+.rail {
+  overflow-y: auto;
+  padding: 16px 20px;
+  background: var(--panel-metal);
+  backdrop-filter: var(--frost);
+}
+#left-rail {
+  border-right: 1px solid var(--line);
+}
+#right-rail {
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rail-section {
+  margin-bottom: 14px;
+}
+.rail-h {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
+/* Left-rail brand header. */
+.brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--text);
+  /* Graphite underscore — a brushed-trim accent under the wordmark. */
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--wood);
+}
+.brand-collapse {
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 6px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.brand-collapse:hover {
+  color: var(--accent);
+}
+
+/* ── Center stage + NOW/NEXT strip ────────────────────────────────── */
+#center {
+  position: relative;
+  overflow: hidden;
+}
+#stage {
+  position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
 }
-
 #stage canvas {
   display: block;
+}
+
+.now-next {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 28px;
+  padding: 8px 16px;
+  background: var(--panel-metal);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  backdrop-filter: var(--frost);
+  z-index: 5;
+  pointer-events: none;
+}
+.nn-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.nn-label {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--dim);
+}
+.nn-value {
+  font-size: 12px;
+  color: var(--text);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Right-rail status badge (was the floating conn pill) ──────────── */
+.rail-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.conn {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.conn::before {
+  content: "● ";
+  color: var(--dim);
+}
+.conn.live {
+  color: var(--live);
+}
+.conn.live::before {
+  color: var(--live);
+}
+
+/* ── Autohiding chat dock (center bottom) ─────────────────────────── */
+/* Rests just off-screen with a small handle peeking; slides up on hover/focus. */
+.chat-dock {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: min(560px, 76%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 12px;
+  transform: translateX(-50%) translateY(calc(100% - 14px));
+  transition: transform 0.22s ease;
+  z-index: 6;
+}
+.chat-dock:hover,
+.chat-dock:focus-within {
+  transform: translateX(-50%) translateY(0);
+}
+.chat-handle {
+  width: 46px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(30, 32, 34, 0.35);
+}
+.chat-box {
+  width: 100%;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--panel-metal);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  backdrop-filter: var(--frost);
+}
+.chat-box::placeholder {
+  color: var(--dim);
+}
+.chat-box:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .hidden {
   display: none !important;
 }
 
-/* ── Diagnostics HUD ─────────────────────────────────────────────── */
+/* ── Diagnostics HUD (floating; hidden by default, toggle `d`) ─────── */
 .hud {
   position: fixed;
   top: 12px;
   left: 12px;
   width: 260px;
   padding: 10px 12px;
-  background: rgba(8, 10, 14, 0.66);
-  border: 1px solid rgba(120, 200, 255, 0.18);
+  background: var(--panel-metal);
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
-  color: #cfe8ff;
+  color: var(--text);
   font-size: 11px;
   line-height: 1.5;
   pointer-events: none;
-  backdrop-filter: blur(6px);
-  z-index: 10;
+  backdrop-filter: var(--frost);
+  z-index: 100;
 }
-
 #hud-title {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #7fd0ff;
+  color: var(--accent);
   margin-bottom: 6px;
 }
-
 .hud-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
 }
 .hud-fps {
-  color: #8effc0;
+  color: var(--live);
 }
 .hud-meta {
-  color: #9fb3c8;
+  color: var(--muted);
   margin-bottom: 6px;
 }
-
 .hud-param {
   display: grid;
   grid-template-columns: 92px 1fr 34px;
@@ -77,187 +330,277 @@ body {
   align-items: center;
 }
 .hud-k {
-  color: #9fb3c8;
+  color: var(--muted);
 }
 .hud-v {
   text-align: right;
-  color: #cfe8ff;
+  color: var(--text);
 }
 .hud-bar {
   height: 5px;
-  background: rgba(120, 200, 255, 0.14);
+  background: rgba(30, 32, 34, 0.14);
   border-radius: 3px;
   overflow: hidden;
 }
 .hud-bar i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #2f80ed, #7fd0ff);
+  background: linear-gradient(90deg, #aeb3b8, #6f757b);
 }
-
 #hud-help {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(120, 200, 255, 0.14);
+  border-top: 1px solid rgba(30, 32, 34, 0.14);
   white-space: pre-line;
-  color: #7e93a8;
+  color: var(--dim);
   font-size: 10px;
 }
 
-/* ── Connection pill ─────────────────────────────────────────────── */
-.conn {
-  position: fixed;
-  bottom: 12px;
-  left: 12px;
-  padding: 4px 10px;
-  font-size: 10px;
-  border-radius: 999px;
-  background: rgba(8, 10, 14, 0.66);
-  border: 1px solid rgba(120, 200, 255, 0.18);
-  color: #9fb3c8;
-  z-index: 10;
-}
-.conn.live {
-  color: #8effc0;
-  border-color: rgba(142, 255, 192, 0.4);
-}
-
-/* ── Monome digital-twin dashboard ───────────────────────────────── */
+/* ── Monome twin — rehoused into the left rail (was fixed bottom-right) ── */
 .monome {
-  position: fixed;
-  bottom: 12px;
-  right: 12px;
-  padding: 12px;
-  max-height: calc(100vh - 24px);
-  overflow: auto;
-  background: rgba(8, 10, 14, 0.78);
-  border: 1px solid rgba(120, 200, 255, 0.18);
-  border-radius: 10px;
-  z-index: 10;
-  backdrop-filter: blur(6px);
-  color: #cfe8ff;
+  color: var(--text);
+}
+/* Declutter for the dashboard: the diagnostic test bar, capability matrix,
+   checklist, log, and takeover row stay in the DOM but are hidden in-rail. */
+.monome .twin-caps,
+.monome .twin-tests,
+.monome .twin-check,
+.monome .twin-log,
+.monome .twin-takeover {
+  display: none;
 }
 .twin-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #7fd0ff;
-  margin-bottom: 8px;
-}
-.twin-caps {
   font-size: 10px;
-  line-height: 1.5;
-  color: #9fb3c8;
-  white-space: pre-line;
+  letter-spacing: 0.06em;
+  color: var(--accent);
   margin-bottom: 8px;
+  text-transform: uppercase;
 }
 .twin-canvas {
   display: block;
   margin: 0 auto;
-}
-.twin-tests {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 10px;
-  max-width: 460px;
-}
-.twin-takeover {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-}
-.takeover-btn {
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-.takeover-btn.on {
-  background: rgba(255, 120, 90, 0.22);
-  border-color: rgba(255, 140, 90, 0.7);
-  color: #ffd0b0;
-}
-.takeover-readout {
-  font-size: 10px;
-  color: #9fb3c8;
-  min-width: 96px;
-}
-.twin-check {
-  margin-top: 8px;
-  font-size: 10px;
-  color: #8effc0;
-}
-.twin-log {
-  margin-top: 6px;
-  font-size: 10px;
-  line-height: 1.45;
-  color: #7e93a8;
-  white-space: pre-line;
-  min-height: 16px;
+  max-width: 100%;
+  cursor: pointer;
+  /* Ease the box when a device switch resizes the canvas, so it grows/shrinks
+     smoothly instead of snapping to the new dimensions. */
+  transition:
+    width 0.22s ease,
+    height 0.22s ease;
 }
 .emu-switch {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   margin-bottom: 10px;
 }
 .emu-btn {
   font: inherit;
   font-size: 10px;
-  padding: 3px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
-  border: 1px solid rgba(120, 200, 255, 0.25);
-  background: rgba(120, 200, 255, 0.06);
-  color: #9fb3c8;
+  border: 1px solid var(--metal-edge);
+  background: var(--metal);
+  color: var(--text);
   cursor: pointer;
+  /* Raised brushed-metal pill: top sheen + soft drop shadow. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.22);
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 .emu-btn.active {
-  background: rgba(127, 208, 255, 0.85);
-  color: #04121f;
-  border-color: rgba(127, 208, 255, 0.9);
+  background: var(--metal-active);
+  color: var(--on-accent);
+  border-color: #4c5156;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
 }
-/* Real hardware drives this size: highlight green + lock it. */
 .emu-btn.connected {
-  background: rgba(142, 255, 192, 0.9);
-  color: #04121f;
-  border-color: rgba(142, 255, 192, 0.95);
+  background: linear-gradient(180deg, #5a5f64 0%, #3c4045 50%, #2b2e32 56%, #4e5358 100%);
+  color: var(--on-accent);
+  border-color: #26282b;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
 }
-/* A size you can't switch to because real hardware of that kind is connected. */
 .emu-btn.disabled,
 .emu-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
 }
-.twin-canvas {
+
+/* ── Ableton mapping panel — rehoused into the right rail ──────────── */
+.ableton-panel {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+/* Native checkboxes default to browser-blue; tint them graphite to match the
+   receiver's controls (no cold blue anywhere in the UI). */
+.ableton-panel input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+/* In-rail it is always expanded; the collapse caret/header is hidden. */
+.ableton-panel .ap-header {
+  display: none;
+}
+.ableton-panel.collapsed .ap-body {
+  display: block;
+}
+.ap-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--muted);
+  font-size: 10px;
+  margin: 0 0 8px;
+}
+.ap-meta b {
+  color: var(--text);
+  font-weight: 600;
+}
+.ap-setname {
+  color: var(--live);
+}
+.ap-preset {
+  color: var(--accent);
+  font-weight: 600;
+}
+.ap-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.ap-btn {
+  font: inherit;
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--metal-edge);
+  background: var(--metal);
+  color: var(--text);
   cursor: pointer;
+  /* Brushed-metal pushbutton: top sheen + soft drop shadow. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.22);
+  transition:
+    filter 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.ap-btn:hover {
+  filter: brightness(1.05);
+}
+.ap-btn:active {
+  /* Pressed: invert the bevel so it sinks in. */
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.ap-prev {
+  padding: 1px 7px;
+}
+.ap-load {
+  font: inherit;
+  font-size: 10px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: rgba(250, 246, 237, 0.75);
+  color: var(--text);
+}
+.ap-section-label {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 16px 0 8px;
+}
+.ap-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ap-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px;
+  border-bottom: 1px solid var(--line-strong);
+}
+.ap-table td {
+  padding: 5px 4px;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(30, 32, 34, 0.06);
+}
+.ap-table tr.ap-active {
+  background: rgba(60, 64, 68, 0.12);
+}
+.ap-table tr.ap-stale {
+  opacity: 0.55;
+}
+.ap-name {
+  color: var(--text);
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ap-idx {
+  color: var(--muted);
+  text-align: right;
+}
+.ap-last {
+  color: var(--live);
+  font-size: 11px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ap-empty {
+  color: var(--dim);
+  font-style: italic;
+  padding: 4px;
+}
+.ap-tpl,
+.ap-var {
+  font: inherit;
+  font-size: 11px;
+  max-width: 130px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  background: rgba(250, 246, 237, 0.75);
+  color: var(--text);
 }
 
-/* ── Gestural panel (control map + variant; right side, toggle `h`) ──── */
-/* Right-anchored so it never overlaps the top-left HUD; collapsed by default. */
+/* ── Gestural panel — kept available (toggle `h`) but off by default ── */
 .gestural-panel {
   position: fixed;
-  /* Left gutter, below the HUD (JS `setTopPx` sets top + max-height); the monome
-     twin lives bottom-right, so the two never overlap. These are fallbacks. */
-  left: 12px;
-  top: 300px;
+  left: 300px;
+  top: 12px;
   width: 300px;
-  max-height: calc(100vh - 352px);
+  max-height: calc(100vh - 24px);
   overflow-y: auto;
   padding: 8px 10px;
-  background: rgba(8, 10, 14, 0.82);
-  border: 1px solid rgba(120, 200, 255, 0.18);
+  background: var(--panel-metal);
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
-  color: #cfe8ff;
+  color: var(--text);
   font-size: 11px;
   line-height: 1.45;
-  backdrop-filter: blur(6px);
-  z-index: 20;
-}
-.gestural-panel.collapsed {
-  overflow: hidden;
-}
-.gestural-panel.collapsed .gp-body {
+  backdrop-filter: var(--frost);
+  z-index: 110;
   display: none;
+}
+.gestural-panel.shown {
+  display: block;
 }
 .gp-header {
   display: flex;
@@ -267,27 +610,30 @@ body {
   user-select: none;
 }
 .gp-caret {
-  color: #7fd0ff;
+  color: var(--accent);
   font-size: 9px;
   transition: transform 0.12s ease;
 }
 .gestural-panel:not(.collapsed) .gp-caret {
   transform: rotate(90deg);
 }
+.gestural-panel.collapsed .gp-body {
+  display: none;
+}
 .gp-title {
   font-weight: 700;
   letter-spacing: 0.03em;
-  color: #7fd0ff;
+  color: var(--accent);
 }
 .gp-hardware {
-  color: #7fd0ff;
+  color: var(--accent);
   font-size: 10px;
   letter-spacing: 0.04em;
   margin: 3px 0 2px;
   opacity: 0.85;
 }
 .gp-page {
-  color: #ffe08a;
+  color: var(--accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -298,7 +644,7 @@ body {
   display: none;
 }
 .gp-summary {
-  color: #9fb3c8;
+  color: var(--muted);
   font-style: italic;
   margin: 6px 0;
 }
@@ -309,7 +655,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 9px;
-  color: #7fd0ff;
+  color: var(--accent);
   margin: 6px 0 3px;
 }
 .gp-entry {
@@ -318,23 +664,22 @@ body {
   gap: 1px 8px;
   padding: 3px 4px;
   margin-bottom: 2px;
-  background: rgba(120, 200, 255, 0.04);
-  border-left: 2px solid rgba(120, 200, 255, 0.25);
+  background: rgba(30, 32, 34, 0.04);
+  border-left: 2px solid var(--line-strong);
   border-radius: 2px;
 }
 .gp-area {
-  color: #9fb3c8;
-  font-family: ui-monospace, monospace;
+  color: var(--muted);
   font-size: 10px;
 }
 .gp-action {
-  color: #7fd0ff;
+  color: var(--accent);
   font-size: 10px;
   text-align: right;
 }
 .gp-effect {
   grid-column: 1 / 3;
-  color: #cfe8ff;
+  color: var(--text);
 }
 .gp-variant {
   display: flex;
@@ -343,175 +688,10 @@ body {
   margin-top: 3px;
 }
 .gp-vrow {
-  color: #8effc0;
-  font-family: ui-monospace, monospace;
+  color: var(--live);
   font-size: 10px;
 }
 .gp-vaxes {
-  color: #9fb3c8;
+  color: var(--muted);
   font-size: 10px;
-}
-
-/* ── Ableton mapping panel (scene/locator → animation; top-right, toggle `a`) ── */
-.ableton-panel {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  width: 500px;
-  max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 24px);
-  overflow-y: auto;
-  padding: 8px 10px;
-  background: rgba(8, 10, 14, 0.86);
-  border: 1px solid rgba(120, 200, 255, 0.18);
-  border-radius: 8px;
-  color: #cfe8ff;
-  font-size: 11px;
-  line-height: 1.4;
-  backdrop-filter: blur(6px);
-  z-index: 19;
-  pointer-events: auto;
-}
-.ableton-panel.collapsed {
-  overflow: hidden;
-}
-.ableton-panel.collapsed .ap-body {
-  display: none;
-}
-.ap-header {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  cursor: pointer;
-  user-select: none;
-}
-.ap-caret {
-  color: #7fd0ff;
-  font-size: 9px;
-  transition: transform 0.12s ease;
-}
-.ableton-panel:not(.collapsed) .ap-caret {
-  transform: rotate(90deg);
-}
-.ap-title {
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #7fd0ff;
-}
-.ap-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  color: #9fb3c8;
-  font-size: 10px;
-  margin: 4px 0 2px;
-}
-.ap-meta b {
-  color: #cfe8ff;
-  font-weight: 600;
-}
-.ap-setname {
-  color: #8effc0;
-}
-.ap-preset {
-  color: #ffd479;
-  font-weight: 600;
-}
-.ap-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 8px 0;
-}
-.ap-btn {
-  font: inherit;
-  font-size: 10px;
-  padding: 3px 9px;
-  border-radius: 6px;
-  border: 1px solid rgba(120, 200, 255, 0.25);
-  background: rgba(120, 200, 255, 0.08);
-  color: #cfe8ff;
-  cursor: pointer;
-}
-.ap-btn:hover {
-  background: rgba(120, 200, 255, 0.18);
-}
-.ap-prev {
-  padding: 1px 7px;
-}
-.ap-load {
-  font: inherit;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: 1px solid rgba(120, 200, 255, 0.25);
-  background: rgba(8, 10, 14, 0.6);
-  color: #cfe8ff;
-}
-.ap-section-label {
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 9px;
-  color: #7fd0ff;
-  margin: 8px 0 3px;
-}
-.ap-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.ap-table th {
-  text-align: left;
-  font-weight: 600;
-  color: #7e93a8;
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 2px 4px;
-  border-bottom: 1px solid rgba(120, 200, 255, 0.14);
-}
-.ap-table td {
-  padding: 2px 4px;
-  vertical-align: middle;
-}
-.ap-table tr.ap-active {
-  background: rgba(142, 255, 192, 0.14);
-}
-.ap-table tr.ap-stale {
-  opacity: 0.55;
-}
-.ap-name {
-  color: #cfe8ff;
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ap-idx {
-  color: #9fb3c8;
-  text-align: right;
-}
-.ap-last {
-  color: #8effc0;
-  font-size: 10px;
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ap-empty {
-  color: #7e93a8;
-  font-style: italic;
-  padding: 4px;
-}
-.ap-tpl,
-.ap-var {
-  font: inherit;
-  font-size: 10px;
-  max-width: 124px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  border: 1px solid rgba(120, 200, 255, 0.2);
-  background: rgba(8, 10, 14, 0.6);
-  color: #cfe8ff;
 }

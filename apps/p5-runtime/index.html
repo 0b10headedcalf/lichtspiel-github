@@ -6,21 +6,64 @@
     <title>Lichtspiel — p5 runtime</title>
   </head>
   <body>
-    <!-- p5 mounts its canvas here (instance mode). -->
-    <div id="stage"></div>
+    <!-- ── Setup-mode dashboard: three-column persistent shell ──────────── -->
+    <div id="app" class="app-shell">
+      <!-- LEFT RAIL — Gestures (monome digital twin: arc + grid). -->
+      <aside id="left-rail" class="rail">
+        <header class="brand">
+          <span class="brand-name">LICHTSPIEL</span>
+          <button id="left-collapse" class="brand-collapse" title="Collapse rail">&laquo;</button>
+        </header>
+        <section class="rail-section">
+          <h2 class="rail-h">Gestures</h2>
+          <!-- The monome twin (arc rings + grid) mounts here. -->
+          <div id="monome-twin" class="monome hidden"></div>
+        </section>
+      </aside>
 
-    <!-- Diagnostics / HUD overlay (toggle with `d`). -->
+      <!-- Shown only when the left rail is collapsed — the way back. -->
+      <button id="left-expand" class="rail-expand left-expand" title="Show rail">&raquo;</button>
+
+      <!-- CENTER — live p5 visual with a NOW / NEXT transport strip. -->
+      <main id="center">
+        <div id="stage"></div>
+        <div id="now-next" class="now-next">
+          <div class="nn-cell">
+            <span class="nn-label">NOW</span>
+            <span id="nn-now" class="nn-value">—</span>
+          </div>
+          <div class="nn-cell">
+            <span class="nn-label">NEXT</span>
+            <span id="nn-next" class="nn-value">—</span>
+          </div>
+        </div>
+        <!-- Autohiding chat dock: peeks at the bottom, slides up on hover. -->
+        <div id="chat-dock" class="chat-dock">
+          <div class="chat-handle"></div>
+          <input class="chat-box" type="text" placeholder="Chat box goes here?" />
+        </div>
+      </main>
+
+      <!-- Shown only when the right rail is collapsed — the way back. -->
+      <button id="right-expand" class="rail-expand right-expand" title="Show panel">&laquo;</button>
+
+      <!-- RIGHT RAIL — Ableton status + mapping (locators / scenes) + chat. -->
+      <aside id="right-rail" class="rail">
+        <header class="rail-status">
+          <button id="right-collapse" class="brand-collapse" title="Collapse panel">&raquo;</button>
+          <span id="conn" class="conn">browser-only</span>
+        </header>
+        <!-- The Ableton mapping panel mounts here. -->
+        <section id="mapping-mount" class="rail-section"></section>
+      </aside>
+    </div>
+
+    <!-- Diagnostics / HUD overlay (hidden by default; toggle with `d`). -->
     <div id="hud" class="hud">
       <div id="hud-title">Lichtspiel</div>
       <div id="hud-body"></div>
       <div id="hud-help"></div>
     </div>
-
-    <!-- Monome digital-twin dashboard (toggle with `g`). -->
-    <div id="monome-twin" class="monome hidden"></div>
-
-    <!-- Connection pill -->
-    <div id="conn" class="conn">browser-only</div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

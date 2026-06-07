@@ -41,6 +41,17 @@ const STEP = 0.06;
 export function installKeyboard(h: KeyboardHandlers): () => void {
   const onKey = (e: KeyboardEvent): void => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // The dashboard's rails are full of focusable controls (selects, checkboxes,
+    // buttons). Performance shortcuts must stay global, so we only stand down when
+    // the user is genuinely typing into a text field — otherwise we handle the key
+    // and preventDefault, so a focused <select>/checkbox can't also swallow it.
+    const ae = document.activeElement as HTMLElement | null;
+    const tag = ae?.tagName;
+    const typing =
+      ae?.isContentEditable ||
+      tag === 'TEXTAREA' ||
+      (tag === 'INPUT' && /^(text|search|number|email|password|url|tel)$/i.test((ae as HTMLInputElement).type));
+    if (typing) return;
     // digits 1..9 → template slots
     if (e.code.startsWith('Digit')) {
       const n = Number(e.code.slice(5));

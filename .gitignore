@@ -54,3 +54,4 @@ context_docs/
 # saved Ableton mappings are local performance data (the bridge writes them here;
 # `git add -f` a specific file to share a preset)
 config/ableton-mappings/
+unvibeify/
